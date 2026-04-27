@@ -215,7 +215,7 @@ describe("DEFAULT variant — negative assertions", () => {
 
 describe("buildPrompt", () => {
 	it("returns an object with system and user strings", () => {
-		const result = buildPrompt({});
+		const result = buildPrompt({ variant: "default" });
 		expect(result).toHaveProperty("system");
 		expect(result).toHaveProperty("user");
 		expect(typeof result.system).toBe("string");

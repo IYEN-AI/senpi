@@ -1,1 +1,0 @@
-30 tests total (28 prompt-content + 2 buildPrompt smoke)
