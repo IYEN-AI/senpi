@@ -44,7 +44,7 @@ export type KnownProvider =
 	| "kimi-coding";
 export type Provider = KnownProvider | string;
 
-export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /** Token budgets for each thinking level (token-based providers only) */
 export interface ThinkingBudgets {
@@ -101,6 +101,13 @@ export interface StreamOptions {
 	 * Not supported by all providers (e.g., AWS Bedrock uses SDK auth).
 	 */
 	headers?: Record<string, string>;
+	/**
+	 * Optional custom fields to merge into the outgoing provider request body.
+	 * Applied before `onPayload` so `onPayload` can observe/override them.
+	 * Provider-managed fields (e.g. `model`, `messages`, `stream`) are preserved
+	 * and cannot be overridden to avoid breaking core request semantics.
+	 */
+	extraBody?: Record<string, unknown>;
 	/**
 	 * HTTP request timeout in milliseconds for providers/SDKs that support it.
 	 * For example, OpenAI and Anthropic SDK clients default to 10 minutes.
@@ -236,10 +243,17 @@ export type Message = UserMessage | AssistantMessage | ToolResultMessage;
 
 import type { TSchema } from "typebox";
 
+export interface FreeformToolFormat {
+	type: "grammar";
+	syntax: "lark";
+	definition: string;
+}
+
 export interface Tool<TParameters extends TSchema = TSchema> {
 	name: string;
 	description: string;
 	parameters: TParameters;
+	freeform?: FreeformToolFormat;
 }
 
 export interface Context {
@@ -305,6 +319,12 @@ export interface OpenAICompletionsCompat {
 	zaiToolStream?: boolean;
 	/** Whether the provider supports the `strict` field in tool definitions. Default: true. */
 	supportsStrictMode?: boolean;
+	/**
+	 * Tool call format for models that don't natively support tool calling.
+	 * When set, the middleware will intercept tool calls and format them as text.
+	 * Supported values: "hermes", "xml", "yaml-xml", "gemma4-delimiter"
+	 */
+	toolCallFormat?: string;
 	/** Cache control convention for prompt caching. "anthropic" applies Anthropic-style `cache_control` markers to the system prompt, last tool definition, and last user/assistant text content. */
 	cacheControlFormat?: "anthropic";
 	/** Whether to send known session-affinity headers (`session_id`, `x-client-request-id`, `x-session-affinity`) from `options.sessionId` when caching is enabled. Default: false. */

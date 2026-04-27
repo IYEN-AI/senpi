@@ -19,7 +19,7 @@ const emptyUsage: Usage = {
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-const compat: Required<OpenAICompletionsCompat> = {
+const compat = {
 	supportsStore: true,
 	supportsDeveloperRole: true,
 	supportsReasoningEffort: true,
@@ -35,9 +35,13 @@ const compat: Required<OpenAICompletionsCompat> = {
 	vercelGatewayRouting: {},
 	zaiToolStream: false,
 	supportsStrictMode: true,
+	toolCallFormat: undefined,
 	cacheControlFormat: "anthropic",
 	sendSessionAffinityHeaders: false,
 	supportsLongCacheRetention: true,
+} satisfies Required<Omit<OpenAICompletionsCompat, "cacheControlFormat" | "toolCallFormat">> & {
+	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
+	toolCallFormat?: OpenAICompletionsCompat["toolCallFormat"];
 };
 
 function buildToolResult(toolCallId: string, timestamp: number): ToolResultMessage {
@@ -87,7 +91,7 @@ describe("openai-completions convertMessages", () => {
 			],
 		};
 
-		const messages = convertMessages(model, context, compat);
+		const messages = convertMessages(model, context, compat as Parameters<typeof convertMessages>[2]);
 		const roles = messages.map((message) => message.role);
 		expect(roles).toEqual(["user", "assistant", "tool", "tool", "user"]);
 

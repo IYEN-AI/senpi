@@ -37,11 +37,13 @@ const compat = {
 	vercelGatewayRouting: {},
 	zaiToolStream: false,
 	supportsStrictMode: true,
+	toolCallFormat: undefined,
 	cacheControlFormat: undefined,
 	sendSessionAffinityHeaders: false,
 	supportsLongCacheRetention: true,
-} satisfies Required<Omit<OpenAICompletionsCompat, "cacheControlFormat">> & {
+} satisfies Required<Omit<OpenAICompletionsCompat, "cacheControlFormat" | "toolCallFormat">> & {
 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
+	toolCallFormat?: OpenAICompletionsCompat["toolCallFormat"];
 };
 
 function buildModel(baseUrl = "http://127.0.0.1:1"): Model<"openai-completions"> {
@@ -206,7 +208,7 @@ describe("openai-completions thinking-as-text replay", () => {
 				],
 			});
 
-			const terminalEvent = events.at(-1);
+			const terminalEvent = events[events.length - 1];
 			expect(terminalEvent?.type).toBe("done");
 		} finally {
 			server.close();

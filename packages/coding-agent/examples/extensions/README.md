@@ -6,10 +6,10 @@ Example extensions for pi-coding-agent.
 
 ```bash
 # Load an extension with --extension flag
-pi --extension examples/extensions/permission-gate.ts
+senpi --extension examples/extensions/permission-gate.ts
 
 # Or copy to extensions directory for auto-discovery
-cp permission-gate.ts ~/.pi/agent/extensions/
+cp permission-gate.ts ~/.senpi/agent/extensions/
 ```
 
 ## Examples
@@ -139,7 +139,7 @@ cp permission-gate.ts ~/.pi/agent/extensions/
 See [docs/extensions.md](../../docs/extensions.md) for full documentation.
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@code-yeongyu/senpi";
 import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {

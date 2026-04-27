@@ -43,7 +43,13 @@ import type {
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
-import { adjustMaxTokensForThinking, buildBaseOptions, clampReasoning } from "./simple-options.js";
+import {
+	adjustMaxTokensForThinking,
+	applyExtraBody,
+	BEDROCK_RESERVED_BODY_KEYS,
+	buildBaseOptions,
+	clampReasoning,
+} from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
 export type BedrockThinkingDisplay = "summarized" | "omitted";
@@ -208,6 +214,11 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream", BedrockOpt
 				additionalModelRequestFields: buildAdditionalModelRequestFields(model, options),
 				...(options.requestMetadata !== undefined && { requestMetadata: options.requestMetadata }),
 			};
+			applyExtraBody(
+				commandInput as unknown as Record<string, unknown>,
+				options.extraBody,
+				BEDROCK_RESERVED_BODY_KEYS,
+			);
 			const nextCommandInput = await options?.onPayload?.(commandInput, model);
 			if (nextCommandInput !== undefined) {
 				commandInput = nextCommandInput as typeof commandInput;
@@ -500,6 +511,8 @@ function mapThinkingLevelToEffort(
 	modelName?: string,
 ): "low" | "medium" | "high" | "xhigh" | "max" {
 	const candidates = modelName ? [modelId, modelName] : [modelId];
+	const isOpus47 = candidates.some((s) => s.includes("opus-4-7") || s.includes("opus-4.7"));
+	const isOpus46 = candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4.6"));
 	switch (level) {
 		case "minimal":
 		case "low":
@@ -509,12 +522,11 @@ function mapThinkingLevelToEffort(
 		case "high":
 			return "high";
 		case "xhigh":
-			if (candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4.6"))) {
-				return "max";
-			}
-			if (candidates.some((s) => s.includes("opus-4-7") || s.includes("opus-4.7"))) {
-				return "xhigh";
-			}
+			if (isOpus47) return "xhigh";
+			if (isOpus46) return "max";
+			return "high";
+		case "max":
+			if (isOpus47 || isOpus46) return "max";
 			return "high";
 		default:
 			return "high";
@@ -903,11 +915,15 @@ function buildAdditionalModelRequestFields(
 						low: 2048,
 						medium: 8192,
 						high: 16384,
-						xhigh: 16384, // Claude doesn't support xhigh, clamp to high
+						xhigh: 16384,
+						max: 16384,
 					};
 
-					// Custom budgets override defaults (xhigh not in ThinkingBudgets, use high)
-					const level = options.reasoning === "xhigh" ? "high" : options.reasoning;
+					// Custom ThinkingBudgets only declares minimal/low/medium/high; xhigh and max
+					// fall back to defaultBudgets (the Bedrock budget-based path doesn't know the
+					// native Anthropic adaptive "max" tier, and this model is not on the adaptive
+					// path anyway).
+					const level = options.reasoning === "xhigh" || options.reasoning === "max" ? "high" : options.reasoning;
 					const budget = options.thinkingBudgets?.[level] ?? defaultBudgets[options.reasoning];
 
 					return {

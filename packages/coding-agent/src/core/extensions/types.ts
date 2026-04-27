@@ -20,6 +20,7 @@ import type {
 	AssistantMessageEvent,
 	AssistantMessageEventStream,
 	Context,
+	FreeformToolFormat,
 	ImageContent,
 	Model,
 	OAuthCredentials,
@@ -80,6 +81,8 @@ export type { ExecOptions, ExecResult } from "../exec.js";
 export type { BuildSystemPromptOptions } from "../system-prompt.js";
 export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
 export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
+
+export type ServiceTier = "auto" | "flex" | "priority";
 
 // ============================================================================
 // UI Context
@@ -306,6 +309,8 @@ export interface ExtensionContext {
 	modelRegistry: ModelRegistry;
 	/** Current model (may be undefined) */
 	model: Model<any> | undefined;
+	/** Current service tier for the active model (from -fast suffix or scoped model config) */
+	serviceTier: ServiceTier | undefined;
 	/** Whether the agent is idle (not streaming) */
 	isIdle(): boolean;
 	/** The current abort signal, or undefined when the agent is not streaming. */
@@ -434,6 +439,8 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	promptGuidelines?: string[];
 	/** Parameter schema (TypeBox) */
 	parameters: TParams;
+	/** Optional OpenAI Responses freeform tool metadata. */
+	freeform?: FreeformToolFormat;
 	/** Controls whether ToolExecutionComponent renders the standard colored shell or the tool renders its own framing. */
 	renderShell?: "default" | "self";
 
@@ -1470,6 +1477,7 @@ export interface ExtensionActions {
  */
 export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
+	getServiceTier: () => ServiceTier | undefined;
 	isIdle: () => boolean;
 	getSignal: () => AbortSignal | undefined;
 	abort: () => void;

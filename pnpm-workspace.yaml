@@ -1,0 +1,18 @@
+packages:
+  - "packages/*"
+  - "packages/web-ui/example"
+  - "packages/coding-agent/examples/extensions/with-deps"
+  - "packages/coding-agent/examples/extensions/custom-provider-anthropic"
+  - "packages/coding-agent/examples/extensions/custom-provider-gitlab-duo"
+  - "packages/coding-agent/examples/extensions/custom-provider-qwen-cli"
+
+nodeLinker: hoisted
+linkWorkspacePackages: deep
+preferWorkspacePackages: true
+
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - canvas
+  - esbuild
+  - koffi
+  - protobufjs

@@ -70,6 +70,7 @@ describe("ExtensionRunner", () => {
 
 	const extensionContextActions: ExtensionContextActions = {
 		getModel: () => undefined,
+		getServiceTier: () => undefined,
 		isIdle: () => true,
 		getSignal: () => undefined,
 		abort: () => {},

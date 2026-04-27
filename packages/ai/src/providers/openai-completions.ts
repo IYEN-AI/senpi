@@ -35,7 +35,13 @@ import { headersToRecord } from "../utils/headers.js";
 import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
-import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+import {
+	applyExtraBody,
+	buildBaseOptions,
+	clampMaxForOpenAI,
+	clampReasoning,
+	OPENAI_COMPLETIONS_RESERVED_BODY_KEYS,
+} from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
 /**
@@ -83,8 +89,12 @@ interface OpenAICompatCacheControl {
 	ttl?: string;
 }
 
-type ResolvedOpenAICompletionsCompat = Omit<Required<OpenAICompletionsCompat>, "cacheControlFormat"> & {
+type ResolvedOpenAICompletionsCompat = Omit<
+	Required<OpenAICompletionsCompat>,
+	"cacheControlFormat" | "toolCallFormat"
+> & {
 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
+	toolCallFormat?: OpenAICompletionsCompat["toolCallFormat"];
 };
 
 type ChatCompletionInstructionMessageParam = ChatCompletionDeveloperMessageParam | ChatCompletionSystemMessageParam;
@@ -406,7 +416,10 @@ export const streamSimpleOpenAICompletions: StreamFunction<"openai-completions",
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
-	const reasoningEffort = supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning);
+	const xhighSupported = supportsXhigh(model);
+	const reasoningEffort: OpenAICompletionsOptions["reasoningEffort"] = xhighSupported
+		? clampMaxForOpenAI(options?.reasoning, true)
+		: clampReasoning(options?.reasoning);
 	const toolChoice = (options as OpenAICompletionsOptions | undefined)?.toolChoice;
 
 	return streamOpenAICompletions(model, context, {
@@ -567,14 +580,20 @@ function buildParams(
 		}
 	}
 
+	applyExtraBody(
+		params as unknown as Record<string, unknown>,
+		options?.extraBody,
+		OPENAI_COMPLETIONS_RESERVED_BODY_KEYS,
+	);
+
 	return params;
 }
 
 function mapReasoningEffort(
 	effort: NonNullable<OpenAICompletionsOptions["reasoningEffort"]>,
-	reasoningEffortMap: Partial<Record<NonNullable<OpenAICompletionsOptions["reasoningEffort"]>, string>>,
+	reasoningEffortMap: Partial<Record<NonNullable<OpenAICompletionsOptions["reasoningEffort"]>, string>> | undefined,
 ): string {
-	return reasoningEffortMap[effort] ?? effort;
+	return reasoningEffortMap?.[effort] ?? effort;
 }
 
 function getCompatCacheControl(
@@ -1080,6 +1099,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
 		supportsStrictMode: true,
+		toolCallFormat: undefined,
 		cacheControlFormat,
 		sendSessionAffinityHeaders: false,
 		supportsLongCacheRetention: true,
@@ -1113,6 +1133,7 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompletion
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		zaiToolStream: model.compat.zaiToolStream ?? detected.zaiToolStream,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,
+		toolCallFormat: model.compat.toolCallFormat ?? detected.toolCallFormat,
 		cacheControlFormat: model.compat.cacheControlFormat ?? detected.cacheControlFormat,
 		sendSessionAffinityHeaders: model.compat.sendSessionAffinityHeaders ?? detected.sendSessionAffinityHeaders,
 		supportsLongCacheRetention: model.compat.supportsLongCacheRetention ?? detected.supportsLongCacheRetention,

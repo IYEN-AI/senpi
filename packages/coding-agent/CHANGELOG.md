@@ -4,7 +4,15 @@
 
 ### Added
 
+- Exposed the new `"max"` thinking level end-to-end: CLI `--thinking max`, `/settings` selector, session cycle on Shift+Tab, `settings.json` `defaultThinkingLevel`, scoped-model thinking borders. `max` routes to Anthropic's native adaptive `max` effort on Opus 4.6/4.7 and clamps to `high` elsewhere.
+- Added `extraBody` pass-through at the config/model layer in `models.json`: providers and per-model overrides accept an `extraBody` object that is merged into outgoing provider request bodies (layered over any `extraBody` supplied at the call site). Pairs with pi-ai's new `StreamOptions.extraBody`.
+- `todotools` builtin extension: refactored the todo tooling into the new `todotools/` module tree and added
+  todo continuation, configurable via `todotools.continuation.enabled` or disabled per run with
+  `--disable-todo-continuation`
 - Added `ctx.ui.setWorkingVisible()` so extensions can hide the built-in interactive working loader row without reserving layout space, plus a border-status editor example that moves working state into a custom editor border ([#3674](https://github.com/badlogic/pi-mono/issues/3674))
+- `bash-timeout` builtin extension: applies a default timeout to every `bash` tool call when the model does not specify one, and caps over-generous timeouts. Defaults to 120 s default / 600 s max, configurable via `PI_BASH_DEFAULT_TIMEOUT_SECONDS` and `PI_BASH_MAX_TIMEOUT_SECONDS` env vars. Also injects a system prompt rider so the model knows the active default and maximum (mirrors free-code's tool-prompt behavior). Long-running shells fail fast instead of hanging the agent.
+- `bash-timeout` integration tests: in-process handler tests covering the `tool_call` mutation path and the `before_agent_start` system-prompt-rider path, complementing the existing pure-function unit tests.
+- README discovery: the fork `README.md` "Core builtins" table now lists `bash-timeout`, and `packages/coding-agent/README.md` "Environment Variables" table documents `PI_BASH_DEFAULT_TIMEOUT_SECONDS` / `PI_BASH_MAX_TIMEOUT_SECONDS`.
 
 ### Fixed
 
@@ -383,9 +391,30 @@ How to disable it:
 
 - Added full `openRouterRouting` field support in `models.json`, including fallbacks, parameter requirements, data collection, ZDR, ignore lists, quantizations, provider sorting, max price, and preferred throughput and latency constraints ([#2904](https://github.com/badlogic/pi-mono/pull/2904) by [@zmberber](https://github.com/zmberber))
 - Set `PI_CODING_AGENT=true` environment variable at startup so sub-processes can detect they are running inside the coding agent ([#2868](https://github.com/badlogic/pi-mono/issues/2868))
+- Permission system builtin extension: full port of opencode's permission system
+  - Rule evaluation with wildcard matching (last-match-wins)
+  - Bash command arity parsing for granular command-level permissions
+  - Per-tool pattern rules (e.g., `bash: { "git *": "allow", "rm *": "deny" }`)
+  - Edit-tool unification (edit/write/apply_patch/multiedit share permissions)
+  - Persistent approved rules via .pi/permissions-approved.jsonl
+  - External directory detection and permission gating
+  - Event publishing: permission_asked, permission_replied (subscribable via pi.events)
+  - TUI permission prompt with Allow once / Always / Deny / Deny with feedback
+  - Non-interactive mode: fail-closed with --permission flag override
+  - settings.json `permission` field for declarative configuration
+  - CLI `--permission` flag for runtime override
+
+### Changed
+
+- agent-system extension: permission handling delegated to permission-system
+- sanepi-managed system conversation injections now use a unified `pi.events` envelope on
+  `sanepi:conversation`, with route/action metadata and a standardized `[system:sanepi]` prefix for builtin
+  continuation and background-task notifications
 
 ### Fixed
 
+- `todotools` continuation prompting now explicitly forbids refusal/summary-only replies and requires verified
+  todo cleanup when work is already complete or no longer actionable
 - Fixed interactive changelog rendering for the telemetry notes by moving the section under a `### Telemetry` heading, so startup shows the full release notes instead of only the version header.
 - Updated `antigravity-image-gen.ts` example extension to use User-Agent version `1.21.9` ([#2901](https://github.com/badlogic/pi-mono/pull/2901) by [@aadishv](https://github.com/aadishv))
 - Bumped default Antigravity User-Agent version to `1.21.9` ([#2901](https://github.com/badlogic/pi-mono/pull/2901) by [@aadishv](https://github.com/aadishv))

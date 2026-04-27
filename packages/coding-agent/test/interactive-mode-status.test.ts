@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import os, { homedir } from "node:os";
 import * as path from "node:path";
 import { type AutocompleteProvider, CombinedAutocompleteProvider, Container } from "@mariozechner/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -239,6 +239,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 			chatContainer: new Container(),
 			settingsManager: {
 				getQuietStartup: () => options.quietStartup,
+				getDisabledBuiltinExtensions: () => [],
 			},
 			sessionManager: {
 				getCwd: () => options.cwd ?? "/tmp/project",
@@ -266,6 +267,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 				(InteractiveMode as any).prototype.formatExtensionDisplayPath.call(fakeThis, p),
 			formatContextPath: (p: string) => (InteractiveMode as any).prototype.formatContextPath.call(fakeThis, p),
 			getStartupExpansionState: () => (InteractiveMode as any).prototype.getStartupExpansionState.call(fakeThis),
+			getBuiltinExtensionNameFromPath: (InteractiveMode as any).prototype.getBuiltinExtensionNameFromPath,
+			getBuiltinExtensionDisplayName: (InteractiveMode as any).prototype.getBuiltinExtensionDisplayName,
+			formatExtensionScopeGroups: (extensions: unknown[]) =>
+				(InteractiveMode as any).prototype.formatExtensionScopeGroups.call(fakeThis, extensions),
 			buildScopeGroups: () => [],
 			formatScopeGroups: () => "resource-list",
 			isPackageSource: (sourceInfo?: SourceInfo) =>
@@ -855,5 +860,64 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const output = renderAll(fakeThis.chatContainer);
 		expect(output).toContain("[Skill conflicts]");
 		expect(output).not.toContain("[Skills]");
+	});
+
+	test("formats builtin synthetic extension paths with readable builtin labels", () => {
+		// given
+		const path = "<builtin:todowrite>";
+		const fakeThis = {
+			getBuiltinExtensionNameFromPath: (InteractiveMode as any).prototype.getBuiltinExtensionNameFromPath,
+			getBuiltinExtensionDisplayName: (InteractiveMode as any).prototype.getBuiltinExtensionDisplayName,
+		};
+
+		// when
+		const displayPath = (InteractiveMode as any).prototype.formatDisplayPath.call(fakeThis, path);
+
+		// then
+		expect(displayPath).toBe("builtin/todo");
+	});
+
+	test("groups builtin extensions separately from user extensions", () => {
+		const home = os.homedir();
+		const fakeThis: any = createShowLoadedResourcesThis({
+			quietStartup: false,
+			toolOutputExpanded: true,
+		});
+		fakeThis.getBuiltinExtensionDisplayName = (InteractiveMode as any).prototype.getBuiltinExtensionDisplayName;
+		fakeThis.getBuiltinExtensionNameFromPath = (InteractiveMode as any).prototype.getBuiltinExtensionNameFromPath;
+		fakeThis.formatDisplayPath = (InteractiveMode as any).prototype.formatDisplayPath;
+		fakeThis.getShortPath = (InteractiveMode as any).prototype.getShortPath;
+		fakeThis.getScopeGroup = (InteractiveMode as any).prototype.getScopeGroup;
+		fakeThis.isPackageSource = (InteractiveMode as any).prototype.isPackageSource;
+		fakeThis.buildScopeGroups = (InteractiveMode as any).prototype.buildScopeGroups;
+		fakeThis.formatScopeGroups = (InteractiveMode as any).prototype.formatScopeGroups;
+		fakeThis.formatExtensionScopeGroups = (InteractiveMode as any).prototype.formatExtensionScopeGroups;
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			extensions: [
+				{ path: "<builtin:todowrite>" },
+				{ path: "<builtin:redraws>" },
+				{
+					path: `${home}/.senpi/agent/extensions/diff.js`,
+					sourceInfo: {
+						path: `${home}/.senpi/agent/extensions/diff.js`,
+						source: "local",
+						scope: "user",
+						origin: "top-level",
+						baseDir: `${home}/.senpi/agent/extensions`,
+					},
+				},
+			],
+			force: true,
+		});
+
+		const output = renderAll(fakeThis.chatContainer);
+		expect(output).toContain("[Extensions]");
+		expect(output).toContain("builtin");
+		expect(output).toContain("redraws");
+		expect(output).toContain("todo");
+		expect(output).toContain("user");
+		expect(output).toContain("~/.senpi/agent/extensions/diff.js");
+		expect(output).not.toContain("todowrite");
 	});
 });

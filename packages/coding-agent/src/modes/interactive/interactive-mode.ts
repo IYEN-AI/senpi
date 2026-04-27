@@ -49,7 +49,6 @@ import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
 	APP_TITLE,
-	getAgentDir,
 	getAuthPath,
 	getDebugLogPath,
 	getDocsPath,
@@ -71,7 +70,6 @@ import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.js";
 import { createCompactionSummaryMessage } from "../../core/messages.js";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.js";
-import { DefaultPackageManager } from "../../core/package-manager.js";
 import type { ResourceDiagnostic } from "../../core/resource-loader.js";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.js";
 import { type SessionContext, SessionManager } from "../../core/session-manager.js";
@@ -782,43 +780,11 @@ export class InteractiveMode {
 	 * Check npm registry for a newer version.
 	 */
 	private async checkForNewVersion(): Promise<string | undefined> {
-		if (process.env.PI_SKIP_VERSION_CHECK || process.env.PI_OFFLINE) return undefined;
-
-		try {
-			const response = await fetch("https://registry.npmjs.org/@mariozechner/pi-coding-agent/latest", {
-				signal: AbortSignal.timeout(10000),
-			});
-			if (!response.ok) return undefined;
-
-			const data = (await response.json()) as { version?: string };
-			const latestVersion = data.version;
-
-			if (latestVersion && latestVersion !== this.version) {
-				return latestVersion;
-			}
-
-			return undefined;
-		} catch {
-			return undefined;
-		}
+		return undefined;
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.PI_OFFLINE) {
-			return [];
-		}
-
-		try {
-			const packageManager = new DefaultPackageManager({
-				cwd: this.sessionManager.getCwd(),
-				agentDir: getAgentDir(),
-				settingsManager: this.settingsManager,
-			});
-			const updates = await packageManager.checkForAvailableUpdates();
-			return updates.map((update) => update.displayName);
-		} catch {
-			return [];
-		}
+		return [];
 	}
 
 	private async checkTmuxKeyboardSetup(): Promise<string | undefined> {
@@ -926,7 +892,25 @@ export class InteractiveMode {
 	// Extension System
 	// =========================================================================
 
+	private getBuiltinExtensionDisplayName(extensionId: string): string {
+		return extensionId === "todowrite" ? "todo" : extensionId;
+	}
+
+	private getBuiltinExtensionNameFromPath(p: string): string | undefined {
+		const builtinMatch = p.match(/^<builtin:([^>]+)>$/);
+		if (!builtinMatch) {
+			return undefined;
+		}
+
+		return this.getBuiltinExtensionDisplayName(builtinMatch[1]);
+	}
+
 	private formatDisplayPath(p: string): string {
+		const builtinName = this.getBuiltinExtensionNameFromPath(p);
+		if (builtinName) {
+			return `builtin/${builtinName}`;
+		}
+
 		const home = os.homedir();
 		let result = p;
 
@@ -1309,6 +1293,19 @@ export class InteractiveMode {
 		}
 
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
+		const _compactPath = (resourcePath: string, sourceInfo?: SourceInfo): string => {
+			const builtinName = this.getBuiltinExtensionNameFromPath(resourcePath);
+			if (builtinName) {
+				return `builtin/${builtinName}`;
+			}
+			const shortPath = this.getShortPath(resourcePath, sourceInfo);
+			const normalizedPath = shortPath.replace(/\\/g, "/");
+			const segments = normalizedPath.split("/").filter((segment) => segment.length > 0 && segment !== "~");
+			if (segments.length > 0) {
+				return segments[segments.length - 1]!;
+			}
+			return shortPath;
+		};
 		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
 			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
 			if (options?.sort !== false) {
@@ -1649,6 +1646,7 @@ export class InteractiveMode {
 			sessionManager: this.sessionManager,
 			modelRegistry: this.session.modelRegistry,
 			model: this.session.model,
+			serviceTier: this.session.serviceTier,
 			isIdle: () => !this.session.isStreaming,
 			signal: this.session.agent.signal,
 			abort: () => this.session.abort(),

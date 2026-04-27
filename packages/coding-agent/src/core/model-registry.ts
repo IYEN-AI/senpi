@@ -113,6 +113,15 @@ const OpenAICompletionsCompatSchema = Type.Object({
 	openRouterRouting: Type.Optional(OpenRouterRoutingSchema),
 	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
 	supportsStrictMode: Type.Optional(Type.Boolean()),
+	toolCallFormat: Type.Optional(
+		Type.Union([
+			Type.Literal("hermes"),
+			Type.Literal("gemma4"),
+			Type.Literal("gemma4-delimiter"),
+			Type.Literal("xml"),
+			Type.Literal("yaml-xml"),
+		]),
+	),
 	supportsLongCacheRetention: Type.Optional(Type.Boolean()),
 });
 
@@ -134,13 +143,15 @@ const ProviderCompatSchema = Type.Union([
 
 // Schema for custom model definition
 // Most fields are optional with sensible defaults for local models (Ollama, LM Studio, etc.)
+const ExtraBodySchema = Type.Record(Type.String(), Type.Unknown());
+
 const ModelDefinitionSchema = Type.Object({
 	id: Type.String({ minLength: 1 }),
 	name: Type.Optional(Type.String({ minLength: 1 })),
 	api: Type.Optional(Type.String({ minLength: 1 })),
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
-	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
+	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image"), Type.Literal("video")]))),
 	cost: Type.Optional(
 		Type.Object({
 			input: Type.Number(),
@@ -152,6 +163,7 @@ const ModelDefinitionSchema = Type.Object({
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	extraBody: Type.Optional(ExtraBodySchema),
 	compat: Type.Optional(ProviderCompatSchema),
 });
 
@@ -159,7 +171,7 @@ const ModelDefinitionSchema = Type.Object({
 const ModelOverrideSchema = Type.Object({
 	name: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
-	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
+	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image"), Type.Literal("video")]))),
 	cost: Type.Optional(
 		Type.Object({
 			input: Type.Optional(Type.Number()),
@@ -171,6 +183,7 @@ const ModelOverrideSchema = Type.Object({
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	extraBody: Type.Optional(ExtraBodySchema),
 	compat: Type.Optional(ProviderCompatSchema),
 });
 
@@ -181,6 +194,7 @@ const ProviderConfigSchema = Type.Object({
 	apiKey: Type.Optional(Type.String({ minLength: 1 })),
 	api: Type.Optional(Type.String({ minLength: 1 })),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	extraBody: Type.Optional(ExtraBodySchema),
 	compat: Type.Optional(ProviderCompatSchema),
 	authHeader: Type.Optional(Type.Boolean()),
 	models: Type.Optional(Type.Array(ModelDefinitionSchema)),
@@ -217,6 +231,7 @@ interface ProviderOverride {
 interface ProviderRequestConfig {
 	apiKey?: string;
 	headers?: Record<string, string>;
+	extraBody?: Record<string, unknown>;
 	authHeader?: boolean;
 }
 
@@ -225,6 +240,7 @@ export type ResolvedRequestAuth =
 			ok: true;
 			apiKey?: string;
 			headers?: Record<string, string>;
+			extraBody?: Record<string, unknown>;
 	  }
 	| {
 			ok: false;
@@ -316,6 +332,7 @@ export class ModelRegistry {
 	private models: Model<Api>[] = [];
 	private providerRequestConfigs: Map<string, ProviderRequestConfig> = new Map();
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
+	private modelRequestExtraBody: Map<string, Record<string, unknown>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
 	private loadError: string | undefined = undefined;
 
@@ -340,6 +357,7 @@ export class ModelRegistry {
 	refresh(): void {
 		this.providerRequestConfigs.clear();
 		this.modelRequestHeaders.clear();
+		this.modelRequestExtraBody.clear();
 		this.loadError = undefined;
 
 		// Ensure dynamic API/OAuth registrations are rebuilt from current provider state.
@@ -475,6 +493,7 @@ export class ModelRegistry {
 					modelOverrides.set(providerName, new Map(Object.entries(providerConfig.modelOverrides)));
 					for (const [modelId, modelOverride] of Object.entries(providerConfig.modelOverrides)) {
 						this.storeModelHeaders(providerName, modelId, modelOverride.headers);
+						this.storeModelExtraBody(providerName, modelId, modelOverride.extraBody);
 					}
 				}
 			}
@@ -501,10 +520,16 @@ export class ModelRegistry {
 				providerConfig.modelOverrides && Object.keys(providerConfig.modelOverrides).length > 0;
 
 			if (models.length === 0) {
-				// Override-only config: needs baseUrl, headers, compat, modelOverrides, or some combination.
-				if (!providerConfig.baseUrl && !providerConfig.headers && !providerConfig.compat && !hasModelOverrides) {
+				// Override-only config: needs baseUrl, headers, compat, modelOverrides, extraBody, or some combination.
+				if (
+					!providerConfig.baseUrl &&
+					!providerConfig.headers &&
+					!providerConfig.compat &&
+					!hasModelOverrides &&
+					!providerConfig.extraBody
+				) {
 					throw new Error(
-						`Provider ${providerName}: must specify "baseUrl", "headers", "compat", "modelOverrides", or "models".`,
+						`Provider ${providerName}: must specify "baseUrl", "headers", "compat", "modelOverrides", "extraBody", or "models".`,
 					);
 				}
 			} else if (!isBuiltIn) {
@@ -570,6 +595,7 @@ export class ModelRegistry {
 
 				const compat = mergeCompat(providerConfig.compat, modelDef.compat);
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
+				this.storeModelExtraBody(providerName, modelDef.id, modelDef.extraBody);
 
 				const defaultCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 				models.push({
@@ -634,16 +660,18 @@ export class ModelRegistry {
 		config: {
 			apiKey?: string;
 			headers?: Record<string, string>;
+			extraBody?: Record<string, unknown>;
 			authHeader?: boolean;
 		},
 	): void {
-		if (!config.apiKey && !config.headers && !config.authHeader) {
+		if (!config.apiKey && !config.headers && !config.extraBody && !config.authHeader) {
 			return;
 		}
 
 		this.providerRequestConfigs.set(providerName, {
 			apiKey: config.apiKey,
 			headers: config.headers,
+			extraBody: config.extraBody,
 			authHeader: config.authHeader,
 		});
 	}
@@ -655,6 +683,15 @@ export class ModelRegistry {
 			return;
 		}
 		this.modelRequestHeaders.set(key, headers);
+	}
+
+	private storeModelExtraBody(providerName: string, modelId: string, extraBody?: Record<string, unknown>): void {
+		const key = this.getModelRequestKey(providerName, modelId);
+		if (!extraBody || Object.keys(extraBody).length === 0) {
+			this.modelRequestExtraBody.delete(key);
+			return;
+		}
+		this.modelRequestExtraBody.set(key, extraBody);
 	}
 
 	/**
@@ -688,10 +725,16 @@ export class ModelRegistry {
 				headers = { ...headers, Authorization: `Bearer ${apiKey}` };
 			}
 
+			const providerExtraBody = providerConfig?.extraBody;
+			const modelExtraBody = this.modelRequestExtraBody.get(this.getModelRequestKey(model.provider, model.id));
+			const extraBody =
+				providerExtraBody || modelExtraBody ? { ...providerExtraBody, ...modelExtraBody } : undefined;
+
 			return {
 				ok: true,
 				apiKey,
 				headers: headers && Object.keys(headers).length > 0 ? headers : undefined,
+				extraBody: extraBody && Object.keys(extraBody).length > 0 ? extraBody : undefined,
 			};
 		} catch (error) {
 			return {
@@ -852,6 +895,7 @@ export class ModelRegistry {
 			for (const modelDef of config.models) {
 				const api = modelDef.api || config.api;
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
+				this.storeModelExtraBody(providerName, modelDef.id, modelDef.extraBody);
 
 				this.models.push({
 					id: modelDef.id,
@@ -876,8 +920,8 @@ export class ModelRegistry {
 					this.models = config.oauth.modifyModels(this.models, cred);
 				}
 			}
-		} else if (config.baseUrl || config.headers) {
-			// Override-only: update baseUrl for existing models. Request headers are resolved per request.
+		} else if (config.baseUrl || config.headers || config.extraBody) {
+			// Override-only: update baseUrl for existing models. Request headers and extraBody are resolved per request.
 			this.models = this.models.map((m) => {
 				if (m.provider !== providerName) return m;
 				return {
@@ -898,6 +942,7 @@ export interface ProviderConfigInput {
 	api?: Api;
 	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 	headers?: Record<string, string>;
+	extraBody?: Record<string, unknown>;
 	authHeader?: boolean;
 	/** OAuth provider for /login support */
 	oauth?: Omit<OAuthProviderInterface, "id">;
@@ -912,6 +957,7 @@ export interface ProviderConfigInput {
 		contextWindow: number;
 		maxTokens: number;
 		headers?: Record<string, string>;
+		extraBody?: Record<string, unknown>;
 		compat?: Model<Api>["compat"];
 	}>;
 }

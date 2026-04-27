@@ -31,7 +31,12 @@ import {
 	mapToolChoice,
 	retainThoughtSignature,
 } from "./google-shared.js";
-import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+import {
+	applyExtraBody,
+	buildBaseOptions,
+	clampReasoning,
+	GOOGLE_GEMINI_CLI_RESERVED_BODY_KEYS,
+} from "./simple-options.js";
 
 /**
  * Thinking level for Gemini 3 models.
@@ -945,7 +950,7 @@ export function buildRequest(
 		};
 	}
 
-	return {
+	const finalRequest: CloudCodeAssistRequest = {
 		project: projectId,
 		model: model.id,
 		request,
@@ -953,9 +958,17 @@ export function buildRequest(
 		userAgent: isAntigravity ? "antigravity" : "pi-coding-agent",
 		requestId: `${isAntigravity ? "agent" : "pi"}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
 	};
+
+	applyExtraBody(
+		request as unknown as Record<string, unknown>,
+		options.extraBody,
+		GOOGLE_GEMINI_CLI_RESERVED_BODY_KEYS,
+	);
+
+	return finalRequest;
 }
 
-type ClampedThinkingLevel = Exclude<ThinkingLevel, "xhigh">;
+type ClampedThinkingLevel = Exclude<ThinkingLevel, "xhigh" | "max">;
 
 function getDisabledThinkingConfig(modelId: string): ThinkingConfig {
 	// Google docs: Gemini 3.1 Pro cannot disable thinking, and Gemini 3 Flash / Flash-Lite

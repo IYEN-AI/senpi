@@ -11,7 +11,7 @@ import {
 	getAgentDir,
 	type PromptTemplate,
 	SessionManager,
-} from "@mariozechner/pi-coding-agent";
+} from "@code-yeongyu/senpi";
 
 // Define custom templates
 const deployTemplate: PromptTemplate = {
@@ -36,7 +36,7 @@ const loader = new DefaultResourceLoader({
 });
 await loader.reload();
 
-// Discover templates from cwd/.pi/prompts/ and ~/.pi/agent/prompts/
+// Discover templates from cwd/.senpi/prompts/ and ~/.senpi/agent/prompts/
 const discovered = loader.getPrompts().prompts;
 console.log("Discovered prompt templates:");
 for (const template of discovered) {

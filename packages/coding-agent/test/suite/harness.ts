@@ -1,5 +1,9 @@
 /**
  * Local test harness for the new coding-agent test suite.
+ *
+ * Usage: continuation integration tests can call
+ * `harness.getInjectedUserMessages()` to inspect follow-up user messages that
+ * contain the SANEPI continuation directive without modifying production code.
  */
 
 import { existsSync, mkdirSync, rmSync } from "node:fs";
@@ -25,6 +29,7 @@ import {
 } from "../utilities.js";
 
 type MessageTextPart = { type: "text"; text: string };
+const CONTINUATION_DIRECTIVE_HEADER = "[SYSTEM DIRECTIVE: SANEPI - TODO CONTINUATION]";
 
 export function getMessageText(message: unknown): string {
 	if (!message || typeof message !== "object" || !("content" in message)) {
@@ -55,14 +60,24 @@ export function getAssistantTexts(harness: Harness): string[] {
 		.map((message) => getMessageText(message));
 }
 
+function getInjectedUserMessagesFromSession(session: AgentSession): string[] {
+	return session.messages
+		.filter((message) => message.role === "user")
+		.map((message) => getMessageText(message))
+		.filter((text) => text.includes(CONTINUATION_DIRECTIVE_HEADER));
+}
+
 export interface HarnessOptions {
 	models?: FauxModelDefinition[];
+	api?: string;
+	provider?: string;
 	settings?: Partial<Settings>;
 	systemPrompt?: string;
 	tools?: AgentTool[];
 	resourceLoader?: ResourceLoader;
 	extensionFactories?: Array<ExtensionFactory | CreateTestExtensionsResultInput>;
 	withConfiguredAuth?: boolean;
+	onPayload?: (payload: unknown) => void;
 }
 
 export interface Harness {
@@ -77,6 +92,7 @@ export interface Harness {
 	setResponses: (responses: FauxResponseStep[]) => void;
 	appendResponses: (responses: FauxResponseStep[]) => void;
 	getPendingResponseCount: () => number;
+	getInjectedUserMessages: () => string[];
 	events: AgentSessionEvent[];
 	eventsOfType<T extends AgentSessionEvent["type"]>(type: T): Extract<AgentSessionEvent, { type: T }>[];
 	tempDir: string;
@@ -92,6 +108,8 @@ function createTempDir(): string {
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
 	const tempDir = createTempDir();
 	const fauxProvider: FauxProviderRegistration = registerFauxProvider({
+		api: options.api,
+		provider: options.provider,
 		models: options.models,
 	});
 	fauxProvider.setResponses([]);
@@ -136,6 +154,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		},
 		convertToLlm,
 		onPayload: async (payload) => {
+			options.onPayload?.(payload);
 			const runner = extensionRunnerRef.current;
 			if (!runner?.hasHandlers("before_provider_request")) {
 				return payload;
@@ -192,6 +211,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		setResponses: fauxProvider.setResponses,
 		appendResponses: fauxProvider.appendResponses,
 		getPendingResponseCount: fauxProvider.getPendingResponseCount,
+		getInjectedUserMessages: () => getInjectedUserMessagesFromSession(session),
 		events,
 		eventsOfType<T extends AgentSessionEvent["type"]>(type: T) {
 			return events.filter((event): event is Extract<AgentSessionEvent, { type: T }> => event.type === type);

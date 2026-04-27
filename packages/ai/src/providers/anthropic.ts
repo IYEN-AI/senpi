@@ -33,7 +33,12 @@ import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.js"
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
-import { adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.js";
+import {
+	ANTHROPIC_RESERVED_BODY_KEYS,
+	adjustMaxTokensForThinking,
+	applyExtraBody,
+	buildBaseOptions,
+} from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
 /**
@@ -173,23 +178,21 @@ function getAnthropicCompat(model: Model<"anthropic-messages">): Required<Anthro
 export interface AnthropicOptions extends StreamOptions {
 	/**
 	 * Enable extended thinking.
-	 * For Opus 4.6 and Sonnet 4.6: uses adaptive thinking (model decides when/how much to think).
+	 * For Opus 4.6, Sonnet 4.6 and Opus 4.7: uses adaptive thinking (model decides when/how much to think).
 	 * For older models: uses budget-based thinking with thinkingBudgetTokens.
 	 */
 	thinkingEnabled?: boolean;
 	/**
 	 * Token budget for extended thinking (older models only).
-	 * Ignored for Opus 4.6 and Sonnet 4.6, which use adaptive thinking.
+	 * Ignored for adaptive-thinking models (Opus 4.6+, Sonnet 4.6+).
 	 */
 	thinkingBudgetTokens?: number;
 	/**
-	 * Effort level for adaptive thinking (Opus 4.6+ and Sonnet 4.6).
-	 * Controls how much thinking Claude allocates:
-	 * - "max": Always thinks with no constraints (Opus 4.6 only)
-	 * - "xhigh": Highest reasoning level (Opus 4.7)
-	 * - "high": Always thinks, deep reasoning (default)
-	 * - "medium": Moderate thinking, may skip for simple queries
-	 * - "low": Minimal thinking, skips for simple tasks
+	 * Effort level for adaptive thinking (Opus 4.6, Sonnet 4.6 and Opus 4.7).
+	 * Model-specific tiers:
+	 * - Opus 4.7: "low" | "medium" | "high" | "xhigh" | "max" (native Anthropic tiers)
+	 * - Opus 4.6: "low" | "medium" | "high" | "max" ("xhigh" maps to "max")
+	 * - Sonnet 4.6: "low" | "medium" | "high" ("xhigh"/"max" clamp to "high")
 	 * Ignored for older models.
 	 */
 	effort?: AnthropicEffort;
@@ -662,26 +665,32 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 };
 
 /**
- * Check if a model supports adaptive thinking (Opus 4.6+, Sonnet 4.6)
+ * Check if a model supports adaptive thinking (Opus 4.6, Sonnet 4.6, Opus 4.7 and later).
  */
 function supportsAdaptiveThinking(modelId: string): boolean {
-	// Adaptive-thinking model IDs (with or without date suffix)
-	return (
-		modelId.includes("opus-4-6") ||
-		modelId.includes("opus-4.6") ||
-		modelId.includes("opus-4-7") ||
-		modelId.includes("opus-4.7") ||
-		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
-	);
+	return isOpus46(modelId) || isOpus47(modelId) || modelId.includes("sonnet-4-6") || modelId.includes("sonnet-4.6");
+}
+
+function isOpus46(modelId: string): boolean {
+	return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
+}
+
+function isOpus47(modelId: string): boolean {
+	return modelId.includes("opus-4-7") || modelId.includes("opus-4.7");
 }
 
 /**
  * Map ThinkingLevel to Anthropic effort levels for adaptive thinking.
- * Note: effort "max" is only valid on Opus 4.6, while Opus 4.7 supports "xhigh".
+ *
+ * Model-specific effort tiers:
+ * - Opus 4.7: supports "low" | "medium" | "high" | "xhigh" | "max"
+ * - Opus 4.6: supports "low" | "medium" | "high" | "max" ("xhigh" maps to "max")
+ * - Sonnet 4.6 and other adaptive models: "low" | "medium" | "high" ("xhigh"/"max" clamp to "high")
  */
-function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"], modelId: string): AnthropicEffort {
+function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"] | "off", modelId: string): AnthropicEffort {
 	switch (level) {
+		case "off":
+			return "low";
 		case "minimal":
 			return "low";
 		case "low":
@@ -691,12 +700,11 @@ function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"], model
 		case "high":
 			return "high";
 		case "xhigh":
-			if (modelId.includes("opus-4-6") || modelId.includes("opus-4.6")) {
-				return "max";
-			}
-			if (modelId.includes("opus-4-7") || modelId.includes("opus-4.7")) {
-				return "xhigh";
-			}
+			if (isOpus47(modelId)) return "xhigh";
+			if (isOpus46(modelId)) return "max";
+			return "high";
+		case "max":
+			if (isOpus47(modelId) || isOpus46(modelId)) return "max";
 			return "high";
 		default:
 			return "high";
@@ -904,15 +912,12 @@ function buildParams(
 			const display: AnthropicThinkingDisplay = options.thinkingDisplay ?? "summarized";
 			if (supportsAdaptiveThinking(model.id)) {
 				// Adaptive thinking: Claude decides when and how much to think.
-				params.thinking = { type: "adaptive", display };
+				params.thinking = { type: "adaptive", display } as MessageCreateParamsStreaming["thinking"];
 				if (options.effort) {
-					// The Anthropic SDK types can lag newly supported effort values such as "xhigh".
-					params.output_config =
-						options.effort === "xhigh"
-							? ({ effort: options.effort } as unknown as NonNullable<
-									MessageCreateParamsStreaming["output_config"]
-								>)
-							: { effort: options.effort };
+					// The Anthropic SDK types can lag newly supported effort values such as "xhigh" and "max".
+					params.output_config = { effort: options.effort } as NonNullable<
+						MessageCreateParamsStreaming["output_config"]
+					>;
 				}
 			} else {
 				// Budget-based thinking for older models
@@ -920,7 +925,7 @@ function buildParams(
 					type: "enabled",
 					budget_tokens: options.thinkingBudgetTokens || 1024,
 					display,
-				};
+				} as MessageCreateParamsStreaming["thinking"];
 			}
 		} else if (options?.thinkingEnabled === false) {
 			params.thinking = { type: "disabled" };
@@ -941,6 +946,8 @@ function buildParams(
 			params.tool_choice = options.toolChoice;
 		}
 	}
+
+	applyExtraBody(params as unknown as Record<string, unknown>, options?.extraBody, ANTHROPIC_RESERVED_BODY_KEYS);
 
 	return params;
 }

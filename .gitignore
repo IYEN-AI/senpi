@@ -3,8 +3,21 @@ dist/
 *.log
 .DS_Store
 *.tsbuildinfo
+.sisyphus/
 # packages/*/node_modules/
-packages/*/dist/
+packages/*/dist/*
+# Keep only the bin-target stubs so pnpm/bun can create `node_modules/.bin`
+# symlinks for workspace packages on a fresh clone without emitting
+# `ENOENT ... chmod ... dist/<cli>.js` warnings. The real CLIs overwrite
+# these stubs during the build step.
+!packages/ai/dist/
+!packages/ai/dist/cli.js
+!packages/coding-agent/dist/
+!packages/coding-agent/dist/cli.js
+!packages/mom/dist/
+!packages/mom/dist/main.js
+!packages/pods/dist/
+!packages/pods/dist/cli.js
 packages/*/dist-chrome/
 packages/*/dist-firefox/
 *.cpuprofile
@@ -35,6 +48,7 @@ out.html
 packages/coding-agent/binaries/
 todo.md
 plans/
+local-ignore/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
 collect.sh

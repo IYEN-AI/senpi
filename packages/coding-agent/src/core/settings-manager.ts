@@ -52,6 +52,15 @@ export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
 }
 
+export interface AgentDefaultsSettings {
+	permission?: Record<string, "allow" | "deny" | "ask">;
+	model?: string;
+}
+
+export interface OpenAISettings {
+	serviceTier?: "auto" | "flex" | "priority";
+}
+
 export type TransportSetting = Transport;
 
 /**
@@ -73,7 +82,7 @@ export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
 	defaultModel?: string;
-	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	transport?: TransportSetting; // default: "sse"
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
@@ -89,6 +98,7 @@ export interface Settings {
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
 	enableInstallTelemetry?: boolean; // default: true - anonymous version/update ping after changelog-detected updates
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
+	disabledBuiltinExtensions?: string[]; // Builtin extension ids to skip loading (e.g. ["background-task"])
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
 	prompts?: string[]; // Array of local prompt template paths or directories
@@ -105,6 +115,8 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
+	agentDefaults?: AgentDefaultsSettings;
+	openai?: OpenAISettings;
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -296,7 +308,10 @@ export class SettingsManager {
 	static inMemory(settings: Partial<Settings> = {}): SettingsManager {
 		const storage = new InMemorySettingsStorage();
 		const initialSettings = SettingsManager.migrateSettings(structuredClone(settings) as Record<string, unknown>);
-		storage.withLock("global", () => JSON.stringify(initialSettings, null, 2));
+		// Persist initial settings to storage so reload() preserves them
+		if (Object.keys(initialSettings).length > 0) {
+			storage.withLock("global", () => JSON.stringify(initialSettings, null, 2));
+		}
 		return SettingsManager.fromStorage(storage);
 	}
 
@@ -611,7 +626,7 @@ export class SettingsManager {
 	}
 
 	getSteeringMode(): "all" | "one-at-a-time" {
-		return this.settings.steeringMode || "one-at-a-time";
+		return this.settings.steeringMode || "all";
 	}
 
 	setSteeringMode(mode: "all" | "one-at-a-time"): void {
@@ -640,11 +655,11 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getDefaultThinkingLevel(): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined {
+	getDefaultThinkingLevel(): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | undefined {
 		return this.settings.defaultThinkingLevel;
 	}
 
-	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): void {
+	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"): void {
 		this.globalSettings.defaultThinkingLevel = level;
 		this.markModified("defaultThinkingLevel");
 		this.save();
@@ -652,6 +667,10 @@ export class SettingsManager {
 
 	getTransport(): TransportSetting {
 		return this.settings.transport ?? "sse";
+	}
+
+	getOpenAIServiceTier(): OpenAISettings["serviceTier"] {
+		return this.settings.openai?.serviceTier;
 	}
 
 	setTransport(transport: TransportSetting): void {
@@ -801,6 +820,10 @@ export class SettingsManager {
 
 	getPackages(): PackageSource[] {
 		return [...(this.settings.packages ?? [])];
+	}
+
+	getDisabledBuiltinExtensions(): string[] {
+		return [...(this.settings.disabledBuiltinExtensions ?? [])];
 	}
 
 	setPackages(packages: PackageSource[]): void {

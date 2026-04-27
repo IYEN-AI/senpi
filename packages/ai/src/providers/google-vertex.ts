@@ -33,7 +33,7 @@ import {
 	mapToolChoice,
 	retainThoughtSignature,
 } from "./google-shared.js";
-import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+import { applyExtraBody, buildBaseOptions, clampReasoning, GOOGLE_RESERVED_BODY_KEYS } from "./simple-options.js";
 
 export interface GoogleVertexOptions extends StreamOptions {
 	toolChoice?: "auto" | "none" | "any";
@@ -473,6 +473,8 @@ function buildParams(
 		config.abortSignal = options.signal;
 	}
 
+	applyExtraBody(config as unknown as Record<string, unknown>, options?.extraBody, GOOGLE_RESERVED_BODY_KEYS);
+
 	const params: GenerateContentParameters = {
 		model: model.id,
 		contents,
@@ -482,7 +484,7 @@ function buildParams(
 	return params;
 }
 
-type ClampedThinkingLevel = Exclude<PiThinkingLevel, "xhigh">;
+type ClampedThinkingLevel = Exclude<PiThinkingLevel, "xhigh" | "max">;
 
 function isGemini3ProModel(model: Model<"google-generative-ai">): boolean {
 	return /gemini-3(?:\.\d+)?-pro/.test(model.id.toLowerCase());

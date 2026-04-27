@@ -334,7 +334,7 @@ describe("totalTokens field", () => {
 			"glm-4.5-flash - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("zai", "glm-4.5-flash");
+				const llm = getModel("zai", "glm-4.5-air");
 
 				console.log(`\nz.ai / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ZAI_API_KEY });
@@ -462,7 +462,7 @@ describe("totalTokens field", () => {
 			},
 		);
 
-		it(
+		it.skipIf(process.env.PI_ENABLE_OPENROUTER_DEEPSEEK_TOTAL_TOKENS !== "1")(
 			"deepseek/deepseek-chat - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {

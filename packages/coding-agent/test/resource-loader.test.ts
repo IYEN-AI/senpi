@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../src/config.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
@@ -15,11 +16,13 @@ describe("DefaultResourceLoader", () => {
 	let tempDir: string;
 	let agentDir: string;
 	let cwd: string;
+	let projectConfigDir: string;
 
 	beforeEach(() => {
 		tempDir = join(tmpdir(), `rl-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		cwd = join(tempDir, "project");
+		projectConfigDir = join(cwd, CONFIG_DIR_NAME);
 		mkdirSync(agentDir, { recursive: true });
 		mkdirSync(cwd, { recursive: true });
 	});
@@ -98,7 +101,7 @@ Prompt content.`,
 
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
-			const projectPromptsDir = join(cwd, ".pi", "prompts");
+			const projectPromptsDir = join(projectConfigDir, "prompts");
 			mkdirSync(userPromptsDir, { recursive: true });
 			mkdirSync(projectPromptsDir, { recursive: true });
 			const userPromptPath = join(userPromptsDir, "commit.md");
@@ -107,7 +110,7 @@ Prompt content.`,
 			writeFileSync(projectPromptPath, "Project prompt");
 
 			const userSkillDir = join(agentDir, "skills", "collision-skill");
-			const projectSkillDir = join(cwd, ".pi", "skills", "collision-skill");
+			const projectSkillDir = join(projectConfigDir, "skills", "collision-skill");
 			mkdirSync(userSkillDir, { recursive: true });
 			mkdirSync(projectSkillDir, { recursive: true });
 			const userSkillPath = join(userSkillDir, "SKILL.md");
@@ -134,9 +137,9 @@ Project skill`,
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
-			const projectThemePath = join(cwd, ".pi", "themes", "collision.json");
+			const projectThemePath = join(projectConfigDir, "themes", "collision.json");
 			mkdirSync(join(agentDir, "themes"), { recursive: true });
-			mkdirSync(join(cwd, ".pi", "themes"), { recursive: true });
+			mkdirSync(join(projectConfigDir, "themes"), { recursive: true });
 			writeFileSync(userThemePath, JSON.stringify(baseTheme, null, 2));
 			if (baseTheme.vars) {
 				baseTheme.vars.accent = "#ff00ff";
@@ -158,7 +161,7 @@ Project skill`,
 
 		it("should keep both extensions loaded when command names collide", async () => {
 			const userExtDir = join(agentDir, "extensions");
-			const projectExtDir = join(cwd, ".pi", "extensions");
+			const projectExtDir = join(projectConfigDir, "extensions");
 			mkdirSync(userExtDir, { recursive: true });
 			mkdirSync(projectExtDir, { recursive: true });
 
@@ -194,7 +197,10 @@ Project skill`,
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions).toHaveLength(2);
+			const discoveredExtensions = extensionsResult.extensions.filter(
+				(extension) => !extension.path.startsWith("<builtin:"),
+			);
+			expect(discoveredExtensions).toHaveLength(2);
 			expect(extensionsResult.errors.some((e) => e.error.includes('Command "/deploy" conflicts'))).toBe(false);
 
 			const sessionManager = SessionManager.inMemory();
@@ -214,12 +220,8 @@ Project skill`,
 			expect(runner.getCommand("user-only")?.description).toBe("user only");
 
 			const commands = runner.getRegisteredCommands();
-			expect(commands.map((command) => command.invocationName)).toEqual([
-				"deploy:1",
-				"project-only",
-				"deploy:2",
-				"user-only",
-			]);
+			const invocationNames = commands.map((command) => command.invocationName).filter((name) => name !== "tui");
+			expect(invocationNames).toEqual(["deploy:1", "project-only", "deploy:2", "user-only"]);
 		});
 
 		it("should honor overrides for auto-discovered resources", async () => {
@@ -287,26 +289,111 @@ Content`,
 			expect(agentsFiles).toEqual([]);
 		});
 
-		it("should discover SYSTEM.md from cwd/.pi", async () => {
-			const piDir = join(cwd, ".pi");
-			mkdirSync(piDir, { recursive: true });
-			writeFileSync(join(piDir, "SYSTEM.md"), "You are a helpful assistant.");
+		it(`should ignore SYSTEM.md from cwd/${CONFIG_DIR_NAME}`, async () => {
+			mkdirSync(projectConfigDir, { recursive: true });
+			writeFileSync(join(projectConfigDir, "SYSTEM.md"), "You are a helpful assistant.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
-			expect(loader.getSystemPrompt()).toBe("You are a helpful assistant.");
+			expect(loader.getSystemPrompt()).toBeUndefined();
 		});
 
-		it("should discover APPEND_SYSTEM.md", async () => {
-			const piDir = join(cwd, ".pi");
-			mkdirSync(piDir, { recursive: true });
-			writeFileSync(join(piDir, "APPEND_SYSTEM.md"), "Additional instructions.");
+		it("should ignore APPEND_SYSTEM.md", async () => {
+			mkdirSync(projectConfigDir, { recursive: true });
+			writeFileSync(join(projectConfigDir, "APPEND_SYSTEM.md"), "Additional instructions.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
-			expect(loader.getAppendSystemPrompt()).toContain("Additional instructions.");
+			expect(loader.getAppendSystemPrompt()).toEqual([]);
+		});
+
+		it("should assign stable builtin identifiers to builtin extension factories", async () => {
+			// given
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+
+			// when
+			await loader.reload();
+			const builtinPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+
+			// then
+			expect(builtinPaths).toEqual([
+				"<builtin:background-task>",
+				"<builtin:agent-system>",
+				"<builtin:permission-system>",
+				"<builtin:gpt-apply-patch>",
+				"<builtin:todowrite>",
+				"<builtin:redraws>",
+				"<builtin:parallel-tool-calls>",
+				"<builtin:service-tier>",
+			]);
+		});
+
+		it("should allow settings to disable selected builtin extensions", async () => {
+			// given
+			mkdirSync(projectConfigDir, { recursive: true });
+			writeFileSync(
+				join(projectConfigDir, "settings.json"),
+				JSON.stringify({ disabledBuiltinExtensions: ["background-task", "redraws"] }, null, 2),
+			);
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+
+			// when
+			await loader.reload();
+			const builtinPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+
+			// then
+			expect(builtinPaths).not.toContain("<builtin:background-task>");
+			expect(builtinPaths).not.toContain("<builtin:redraws>");
+			expect(builtinPaths).toContain("<builtin:agent-system>");
+			expect(builtinPaths).toContain("<builtin:todowrite>");
+		});
+
+		it("should allow SettingsManager.inMemory() to disable selected builtin extensions", async () => {
+			// given
+			const settingsManager = SettingsManager.inMemory({
+				disabledBuiltinExtensions: ["background-task", "redraws"],
+			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+
+			// when
+			await loader.reload();
+			const builtinPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+
+			// then
+			expect(builtinPaths).not.toContain("<builtin:background-task>");
+			expect(builtinPaths).not.toContain("<builtin:redraws>");
+			expect(builtinPaths).toContain("<builtin:agent-system>");
+			expect(builtinPaths).toContain("<builtin:todowrite>");
+		});
+
+		it("should seed default global extensions into the default global agent extensions directory", async () => {
+			// given
+			const previousAgentDir = process.env[ENV_AGENT_DIR];
+			process.env[ENV_AGENT_DIR] = agentDir;
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+
+			try {
+				// when
+				await loader.reload();
+				const extensionPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+
+				// then
+				expect(extensionPaths).toContain(join(agentDir, "extensions", "diff.js"));
+				expect(extensionPaths).toContain(join(agentDir, "extensions", "files.js"));
+				expect(extensionPaths).toContain(join(agentDir, "extensions", "prompt-url-widget.js"));
+				expect(extensionPaths).toContain(join(agentDir, "extensions", "tps.js"));
+				expect(extensionPaths).toContain("<builtin:todowrite>");
+				expect(extensionPaths).toContain("<builtin:redraws>");
+				expect(readFileSync(join(agentDir, "extensions", "diff.js"), "utf-8")).toContain("Generated by senpi");
+			} finally {
+				if (previousAgentDir === undefined) {
+					delete process.env[ENV_AGENT_DIR];
+				} else {
+					process.env[ENV_AGENT_DIR] = previousAgentDir;
+				}
+			}
 		});
 	});
 
@@ -446,19 +533,7 @@ Content`,
 			expect(skills).toHaveLength(1);
 			expect(skills[0].name).toBe("injected");
 		});
-
-		it("should apply systemPromptOverride", async () => {
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-				systemPromptOverride: () => "Custom system prompt",
-			});
-			await loader.reload();
-
-			expect(loader.getSystemPrompt()).toBe("Custom system prompt");
-		});
 	});
-
 	describe("extension conflict detection", () => {
 		it("should detect tool conflicts between extensions", async () => {
 			// Create two extensions that register the same tool

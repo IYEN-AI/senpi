@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent, Message, TextContent } from "@mariozechner/pi-ai";
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import {
 	appendFileSync,
 	closeSync,
@@ -15,8 +15,29 @@ import {
 } from "fs";
 import { readdir, readFile, stat } from "fs/promises";
 import { join, resolve } from "path";
-import { v7 as uuidv7 } from "uuid";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+
+// Fork change: inlined UUIDv7 (upstream uses the `uuid` npm package). Keeps this
+// package self-contained so consumers don't need a transitive `uuid` install.
+function uuidv7(): string {
+	const ts = BigInt(Date.now());
+	const bytes = randomBytes(10);
+	const hex = [
+		((ts >> 40n) & 0xffn).toString(16).padStart(2, "0"),
+		((ts >> 32n) & 0xffn).toString(16).padStart(2, "0"),
+		((ts >> 24n) & 0xffn).toString(16).padStart(2, "0"),
+		((ts >> 16n) & 0xffn).toString(16).padStart(2, "0"),
+		((ts >> 8n) & 0xffn).toString(16).padStart(2, "0"),
+		(ts & 0xffn).toString(16).padStart(2, "0"),
+		(0x70 | (bytes[0]! & 0x0f)).toString(16).padStart(2, "0"),
+		bytes[1]!.toString(16).padStart(2, "0"),
+		(0x80 | (bytes[2]! & 0x3f)).toString(16).padStart(2, "0"),
+		bytes[3]!.toString(16).padStart(2, "0"),
+		...Array.from(bytes.slice(4), (b) => b.toString(16).padStart(2, "0")),
+	].join("");
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -423,7 +444,7 @@ export function buildSessionContext(
 
 /**
  * Compute the default session directory for a cwd.
- * Encodes cwd into a safe directory name under ~/.pi/agent/sessions/.
+ * Encodes cwd into a safe directory name under ~/.senpi/agent/sessions/.
  */
 export function getDefaultSessionDir(cwd: string, agentDir: string = getDefaultAgentDir()): string {
 	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
@@ -1264,7 +1285,7 @@ export class SessionManager {
 	/**
 	 * Create a new session.
 	 * @param cwd Working directory (stored in session header)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pi/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.senpi/agent/sessions/<encoded-cwd>/).
 	 */
 	static create(cwd: string, sessionDir?: string): SessionManager {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd);
@@ -1290,7 +1311,7 @@ export class SessionManager {
 	/**
 	 * Continue the most recent session, or create new if none.
 	 * @param cwd Working directory
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pi/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.senpi/agent/sessions/<encoded-cwd>/).
 	 */
 	static continueRecent(cwd: string, sessionDir?: string): SessionManager {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd);
@@ -1359,7 +1380,7 @@ export class SessionManager {
 	/**
 	 * List all sessions for a directory.
 	 * @param cwd Working directory (used to compute default session directory)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pi/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.senpi/agent/sessions/<encoded-cwd>/).
 	 * @param onProgress Optional callback for progress updates (loaded, total)
 	 */
 	static async list(cwd: string, sessionDir?: string, onProgress?: SessionListProgress): Promise<SessionInfo[]> {

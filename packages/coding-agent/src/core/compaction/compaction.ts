@@ -13,6 +13,8 @@ import {
 	createBranchSummaryMessage,
 	createCompactionSummaryMessage,
 	createCustomMessage,
+	filterContextExcludedMessages,
+	isContextExcludedCustomMessage,
 } from "../messages.js";
 import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.js";
 import {
@@ -81,6 +83,10 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 		return entry.message;
 	}
 	if (entry.type === "custom_message") {
+		if (isContextExcludedCustomMessage(entry.customType)) {
+			return undefined;
+		}
+
 		return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
 	}
 	if (entry.type === "branch_summary") {
@@ -90,6 +96,10 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 		return createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp);
 	}
 	return undefined;
+}
+
+function isCutPointCustomMessage(entry: SessionEntry): boolean {
+	return entry.type === "custom_message" && !isContextExcludedCustomMessage(entry.customType);
 }
 
 function getMessageFromEntryForCompaction(entry: SessionEntry): AgentMessage | undefined {
@@ -328,8 +338,8 @@ function findValidCutPoints(entries: SessionEntry[], startIndex: number, endInde
 				break;
 		}
 
-		// branch_summary and custom_message are user-role messages, valid cut points
-		if (entry.type === "branch_summary" || entry.type === "custom_message") {
+		// branch_summary and non-excluded custom_message are user-role messages, valid cut points
+		if (entry.type === "branch_summary" || isCutPointCustomMessage(entry)) {
 			cutPoints.push(i);
 		}
 	}
@@ -344,8 +354,8 @@ function findValidCutPoints(entries: SessionEntry[], startIndex: number, endInde
 export function findTurnStartIndex(entries: SessionEntry[], entryIndex: number, startIndex: number): number {
 	for (let i = entryIndex; i >= startIndex; i--) {
 		const entry = entries[i];
-		// branch_summary and custom_message are user-role messages, can start a turn
-		if (entry.type === "branch_summary" || entry.type === "custom_message") {
+		// branch_summary and non-excluded custom_message are user-role messages, can start a turn
+		if (entry.type === "branch_summary" || isCutPointCustomMessage(entry)) {
 			return i;
 		}
 		if (entry.type === "message") {
@@ -425,6 +435,9 @@ export function findCutPoint(
 		const prevEntry = entries[cutIndex - 1];
 		// Stop at session header or compaction boundaries
 		if (prevEntry.type === "compaction") {
+			break;
+		}
+		if (prevEntry.type === "custom_message" && isContextExcludedCustomMessage(prevEntry.customType)) {
 			break;
 		}
 		if (prevEntry.type === "message") {
@@ -536,6 +549,7 @@ export async function generateSummary(
 	signal?: AbortSignal,
 	customInstructions?: string,
 	previousSummary?: string,
+	extraBody?: Record<string, unknown>,
 	thinkingLevel?: ThinkingLevel,
 ): Promise<string> {
 	const maxTokens = Math.floor(0.8 * reserveTokens);
@@ -568,8 +582,8 @@ export async function generateSummary(
 
 	const completionOptions =
 		model.reasoning && thinkingLevel && thinkingLevel !== "off"
-			? { maxTokens, signal, apiKey, headers, reasoning: thinkingLevel }
-			: { maxTokens, signal, apiKey, headers };
+			? { maxTokens, signal, apiKey, headers, extraBody, reasoning: thinkingLevel }
+			: { maxTokens, signal, apiKey, headers, extraBody };
 
 	const response = await completeSimple(
 		model,
@@ -637,7 +651,9 @@ export function prepareCompaction(
 	}
 	const boundaryEnd = pathEntries.length;
 
-	const tokensBefore = estimateContextTokens(buildSessionContext(pathEntries).messages).tokens;
+	const tokensBefore = estimateContextTokens(
+		filterContextExcludedMessages(buildSessionContext(pathEntries).messages),
+	).tokens;
 
 	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
 
@@ -721,6 +737,7 @@ export async function compact(
 	headers?: Record<string, string>,
 	customInstructions?: string,
 	signal?: AbortSignal,
+	extraBody?: Record<string, unknown>,
 	thinkingLevel?: ThinkingLevel,
 ): Promise<CompactionResult> {
 	const {
@@ -750,6 +767,7 @@ export async function compact(
 						signal,
 						customInstructions,
 						previousSummary,
+						extraBody,
 						thinkingLevel,
 					)
 				: Promise.resolve("No prior history."),
@@ -760,6 +778,7 @@ export async function compact(
 				apiKey,
 				headers,
 				signal,
+				extraBody,
 				thinkingLevel,
 			),
 		]);
@@ -776,6 +795,7 @@ export async function compact(
 			signal,
 			customInstructions,
 			previousSummary,
+			extraBody,
 			thinkingLevel,
 		);
 	}
@@ -806,6 +826,7 @@ async function generateTurnPrefixSummary(
 	apiKey: string,
 	headers?: Record<string, string>,
 	signal?: AbortSignal,
+	extraBody?: Record<string, unknown>,
 	thinkingLevel?: ThinkingLevel,
 ): Promise<string> {
 	const maxTokens = Math.floor(0.5 * reserveTokens); // Smaller budget for turn prefix
@@ -824,8 +845,8 @@ async function generateTurnPrefixSummary(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
 		model.reasoning && thinkingLevel && thinkingLevel !== "off"
-			? { maxTokens, signal, apiKey, headers, reasoning: thinkingLevel }
-			: { maxTokens, signal, apiKey, headers },
+			? { maxTokens, signal, apiKey, headers, extraBody, reasoning: thinkingLevel }
+			: { maxTokens, signal, apiKey, headers, extraBody },
 	);
 
 	if (response.stopReason === "error") {

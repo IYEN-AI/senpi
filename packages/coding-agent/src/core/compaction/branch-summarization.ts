@@ -13,6 +13,7 @@ import {
 	createBranchSummaryMessage,
 	createCompactionSummaryMessage,
 	createCustomMessage,
+	isContextExcludedCustomMessage,
 } from "../messages.js";
 import type { ReadonlySessionManager, SessionEntry } from "../session-manager.js";
 import { estimateTokens } from "./compaction.js";
@@ -69,6 +70,8 @@ export interface GenerateBranchSummaryOptions {
 	apiKey: string;
 	/** Request headers for the model */
 	headers?: Record<string, string>;
+	/** Extra request body fields to merge into outgoing provider payload */
+	extraBody?: Record<string, unknown>;
 	/** Abort signal for cancellation */
 	signal: AbortSignal;
 	/** Optional custom instructions for summarization */
@@ -151,6 +154,10 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 			return entry.message;
 
 		case "custom_message":
+			if (isContextExcludedCustomMessage(entry.customType)) {
+				return undefined;
+			}
+
 			return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
 
 		case "branch_summary":
@@ -284,7 +291,16 @@ export async function generateBranchSummary(
 	entries: SessionEntry[],
 	options: GenerateBranchSummaryOptions,
 ): Promise<BranchSummaryResult> {
-	const { model, apiKey, headers, signal, customInstructions, replaceInstructions, reserveTokens = 16384 } = options;
+	const {
+		model,
+		apiKey,
+		headers,
+		extraBody,
+		signal,
+		customInstructions,
+		replaceInstructions,
+		reserveTokens = 16384,
+	} = options;
 
 	// Token budget = context window minus reserved space for prompt + response
 	const contextWindow = model.contextWindow || 128000;
@@ -324,7 +340,7 @@ export async function generateBranchSummary(
 	const response = await completeSimple(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		{ apiKey, headers, signal, maxTokens: 2048 },
+		{ apiKey, headers, extraBody, signal, maxTokens: 2048 },
 	);
 
 	// Check if aborted or errored

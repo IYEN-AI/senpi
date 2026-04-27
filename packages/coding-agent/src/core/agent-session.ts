@@ -24,7 +24,7 @@ import type {
 	ThinkingLevel,
 } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@mariozechner/pi-ai";
-import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@mariozechner/pi-ai";
+import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsMax, supportsXhigh } from "@mariozechner/pi-ai";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
@@ -41,8 +41,10 @@ import {
 	shouldCompact,
 } from "./compaction/index.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
+import { type BuildDynamicSystemPromptOptions, buildDynamicSystemPrompt } from "./dynamic-prompt/index.js";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.js";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.js";
+import type { ServiceTier } from "./extensions/builtin/service-tier.js";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -69,7 +71,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
-import type { BashExecutionMessage, CustomMessage } from "./messages.js";
+import { type BashExecutionMessage, type CustomMessage, filterContextExcludedMessages } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.js";
@@ -78,7 +80,6 @@ import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader }
 import type { SettingsManager } from "./settings-manager.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
-import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.js";
@@ -144,7 +145,7 @@ export interface AgentSessionConfig {
 	settingsManager: SettingsManager;
 	cwd: string;
 	/** Models to cycle through with Ctrl+P (from --models flag) */
-	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
+	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
 	/** Resource loader for skills, prompts, themes, context files, system prompt */
 	resourceLoader: ResourceLoader;
 	/** SDK custom tools registered outside extensions */
@@ -229,8 +230,11 @@ interface ToolDefinitionEntry {
 /** Standard thinking levels */
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
 
-/** Thinking levels including xhigh (for supported models) */
+/** Thinking levels up through xhigh (GPT-5.x codex-max, Opus 4.6/4.7). */
 const THINKING_LEVELS_WITH_XHIGH: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+/** Thinking levels including native max (Opus 4.6 legacy / Opus 4.7 native). */
+const THINKING_LEVELS_WITH_MAX: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 // ============================================================================
 // AgentSession Class
@@ -241,7 +245,7 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settingsManager: SettingsManager;
 
-	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
+	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
 
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
@@ -303,7 +307,8 @@ export class AgentSession {
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
-	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
+	private _currentServiceTier: ServiceTier | undefined = undefined;
+	private _baseSystemPromptOptions!: BuildDynamicSystemPromptOptions;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -320,8 +325,12 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
-		// Always subscribe to agent events for internal handling
-		// (session persistence, extensions, auto-compaction, retry logic)
+		const initialModel = this.agent.state.model;
+		if (initialModel) {
+			const scopedMatch = this._scopedModels.find((sm) => modelsAreEqual(sm.model, initialModel));
+			this._currentServiceTier = scopedMatch?.serviceTier;
+		}
+
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 		this._installAgentToolHooks();
 
@@ -339,6 +348,7 @@ export class AgentSession {
 	private async _getRequiredRequestAuth(model: Model<any>): Promise<{
 		apiKey: string;
 		headers?: Record<string, string>;
+		extraBody?: Record<string, unknown>;
 	}> {
 		const result = await this._modelRegistry.getApiKeyAndHeaders(model);
 		if (!result.ok) {
@@ -348,7 +358,7 @@ export class AgentSession {
 			throw new Error(result.error);
 		}
 		if (result.apiKey) {
-			return { apiKey: result.apiKey, headers: result.headers };
+			return { apiKey: result.apiKey, headers: result.headers, extraBody: result.extraBody };
 		}
 
 		const isOAuth = this._modelRegistry.isUsingOAuth(model);
@@ -750,6 +760,10 @@ export class AgentSession {
 		return this.agent.state.thinkingLevel;
 	}
 
+	get serviceTier(): ServiceTier | undefined {
+		return this._currentServiceTier;
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming;
@@ -852,12 +866,14 @@ export class AgentSession {
 	}
 
 	/** Scoped models for cycling (from --models flag) */
-	get scopedModels(): ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel }> {
+	get scopedModels(): ReadonlyArray<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }> {
 		return this._scopedModels;
 	}
 
 	/** Update scoped models for cycling */
-	setScopedModels(scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>): void {
+	setScopedModels(
+		scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>,
+	): void {
 		this._scopedModels = scopedModels;
 	}
 
@@ -906,10 +922,6 @@ export class AgentSession {
 			}
 		}
 
-		const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
-		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
-		const appendSystemPrompt =
-			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
@@ -917,13 +929,11 @@ export class AgentSession {
 			cwd: this._cwd,
 			skills: loadedSkills,
 			contextFiles: loadedContextFiles,
-			customPrompt: loaderSystemPrompt,
-			appendSystemPrompt,
 			selectedTools: validToolNames,
 			toolSnippets,
 			promptGuidelines,
 		};
-		return buildSystemPrompt(this._baseSystemPromptOptions);
+		return buildDynamicSystemPrompt(this._baseSystemPromptOptions);
 	}
 
 	// =========================================================================
@@ -1399,7 +1409,9 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(model.provider, model.id);
 		this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
 
-		// Re-clamp thinking level for new model's capabilities
+		const scopedMatch = this._scopedModels.find((sm) => modelsAreEqual(sm.model, model));
+		this._currentServiceTier = scopedMatch?.serviceTier;
+
 		this.setThinkingLevel(thinkingLevel);
 
 		await this._emitModelSelect(model, previousModel, "set");
@@ -1431,10 +1443,10 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 		const thinkingLevel = this._getThinkingLevelForModelSwitch(next.thinkingLevel);
 
-		// Apply model
 		this.agent.state.model = next.model;
 		this.sessionManager.appendModelChange(next.model.provider, next.model.id);
 		this.settingsManager.setDefaultModelAndProvider(next.model.provider, next.model.id);
+		this._currentServiceTier = next.serviceTier;
 
 		// Apply thinking level.
 		// - Explicit scoped model thinking level overrides current session level
@@ -1520,7 +1532,9 @@ export class AgentSession {
 	 */
 	getAvailableThinkingLevels(): ThinkingLevel[] {
 		if (!this.supportsThinking()) return ["off"];
-		return this.supportsXhighThinking() ? THINKING_LEVELS_WITH_XHIGH : THINKING_LEVELS;
+		if (this.supportsMaxThinking()) return THINKING_LEVELS_WITH_MAX;
+		if (this.supportsXhighThinking()) return THINKING_LEVELS_WITH_XHIGH;
+		return THINKING_LEVELS;
 	}
 
 	/**
@@ -1528,6 +1542,14 @@ export class AgentSession {
 	 */
 	supportsXhighThinking(): boolean {
 		return this.model ? supportsXhigh(this.model) : false;
+	}
+
+	/**
+	 * Check if current model exposes the native "max" adaptive thinking tier
+	 * (currently Anthropic Opus 4.6 legacy and Opus 4.7 native).
+	 */
+	supportsMaxThinking(): boolean {
+		return this.model ? supportsMax(this.model) : false;
 	}
 
 	/**
@@ -1548,17 +1570,17 @@ export class AgentSession {
 	}
 
 	private _clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
-		const ordered = THINKING_LEVELS_WITH_XHIGH;
+		const ordered = THINKING_LEVELS_WITH_MAX;
 		const available = new Set(availableLevels);
 		const requestedIndex = ordered.indexOf(level);
 		if (requestedIndex === -1) {
 			return availableLevels[0] ?? "off";
 		}
-		for (let i = requestedIndex; i < ordered.length; i++) {
+		for (let i = requestedIndex; i >= 0; i--) {
 			const candidate = ordered[i];
 			if (available.has(candidate)) return candidate;
 		}
-		for (let i = requestedIndex - 1; i >= 0; i--) {
+		for (let i = requestedIndex + 1; i < ordered.length; i++) {
 			const candidate = ordered[i];
 			if (available.has(candidate)) return candidate;
 		}
@@ -1607,7 +1629,7 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const { apiKey, headers } = await this._getRequiredRequestAuth(this.model);
+			const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(this.model);
 
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
@@ -1664,6 +1686,7 @@ export class AgentSession {
 					headers,
 					customInstructions,
 					this._compactionAbortController.signal,
+					extraBody,
 					this.thinkingLevel,
 				);
 				summary = result.summary;
@@ -1809,7 +1832,7 @@ export class AgentSession {
 		// This ensures sessions that hit persistent API errors (e.g. 529) can still compact.
 		let contextTokens: number;
 		if (assistantMessage.stopReason === "error") {
-			const messages = this.agent.state.messages;
+			const messages = filterContextExcludedMessages(this.agent.state.messages);
 			const estimate = estimateContextTokens(messages);
 			if (estimate.lastUsageIndex === null) return; // No usage data at all
 			// Verify the usage source is post-compaction. Kept pre-compaction messages
@@ -1864,7 +1887,7 @@ export class AgentSession {
 				});
 				return;
 			}
-			const { apiKey, headers } = authResult;
+			const { apiKey, headers, extraBody } = authResult;
 
 			const pathEntries = this.sessionManager.getBranch();
 
@@ -1929,6 +1952,7 @@ export class AgentSession {
 					headers,
 					undefined,
 					this._autoCompactionAbortController.signal,
+					extraBody,
 					this.thinkingLevel,
 				);
 				summary = compactResult.summary;
@@ -2190,6 +2214,7 @@ export class AgentSession {
 			},
 			{
 				getModel: () => this.model,
+				getServiceTier: () => this.serviceTier,
 				isIdle: () => !this.isStreaming,
 				getSignal: () => this.agent.signal,
 				abort: () => this.abort(),
@@ -2752,12 +2777,13 @@ export class AgentSession {
 			let summaryDetails: unknown;
 			if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
 				const model = this.model!;
-				const { apiKey, headers } = await this._getRequiredRequestAuth(model);
+				const { apiKey, headers, extraBody } = await this._getRequiredRequestAuth(model);
 				const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
 				const result = await generateBranchSummary(entriesToSummarize, {
 					model,
 					apiKey,
 					headers,
+					extraBody,
 					signal: this._branchSummaryAbortController.signal,
 					customInstructions,
 					replaceInstructions,
@@ -2968,7 +2994,7 @@ export class AgentSession {
 			}
 		}
 
-		const estimate = estimateContextTokens(this.messages);
+		const estimate = estimateContextTokens(filterContextExcludedMessages(this.messages));
 		const percent = (estimate.tokens / contextWindow) * 100;
 
 		return {

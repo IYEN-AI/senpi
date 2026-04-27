@@ -6,7 +6,7 @@
  * and can be activated via CLI flag, /preset command, or Ctrl+Shift+U to cycle.
  *
  * Config files (merged, project takes precedence):
- * - ~/.pi/agent/presets.json (global)
+ * - ~/.senpi/agent/presets.json (global)
  * - <cwd>/.pi/presets.json (project-local)
  *
  * Example presets.json:
@@ -40,9 +40,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@code-yeongyu/senpi";
+import { DynamicBorder, getAgentDir } from "@code-yeongyu/senpi";
 import type { Api, Model } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { DynamicBorder, getAgentDir } from "@mariozechner/pi-coding-agent";
 import { Container, Key, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
 // Preset configuration
@@ -52,7 +52,7 @@ interface Preset {
 	/** Model ID (e.g., "claude-sonnet-4-5") */
 	model?: string;
 	/** Thinking level */
-	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	/** Tools to enable (replaces default set) */
 	tools?: string[];
 	/** Instructions to append to system prompt */
@@ -100,7 +100,7 @@ function loadPresets(cwd: string): PresetsConfig {
 
 interface OriginalState {
 	model: Model<Api> | undefined;
-	thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	tools: string[];
 }
 
@@ -200,7 +200,10 @@ export default function presetExtension(pi: ExtensionAPI) {
 		const presetNames = Object.keys(presets);
 
 		if (presetNames.length === 0) {
-			ctx.ui.notify("No presets defined. Add presets to ~/.pi/agent/presets.json or .pi/presets.json", "warning");
+			ctx.ui.notify(
+				"No presets defined. Add presets to ~/.senpi/agent/presets.json or .senpi/presets.json",
+				"warning",
+			);
 			return;
 		}
 
@@ -308,7 +311,10 @@ export default function presetExtension(pi: ExtensionAPI) {
 	async function cyclePreset(ctx: ExtensionContext): Promise<void> {
 		const presetNames = getPresetOrder();
 		if (presetNames.length === 0) {
-			ctx.ui.notify("No presets defined. Add presets to ~/.pi/agent/presets.json or .pi/presets.json", "warning");
+			ctx.ui.notify(
+				"No presets defined. Add presets to ~/.senpi/agent/presets.json or .senpi/presets.json",
+				"warning",
+			);
 			return;
 		}
 

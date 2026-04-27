@@ -18,7 +18,13 @@ import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { headersToRecord } from "../utils/headers.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.js";
-import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+import {
+	applyExtraBody,
+	buildBaseOptions,
+	clampMaxForOpenAI,
+	clampReasoning,
+	OPENAI_RESPONSES_RESERVED_BODY_KEYS,
+} from "./simple-options.js";
 
 const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 
@@ -149,7 +155,10 @@ export const streamSimpleOpenAIResponses: StreamFunction<"openai-responses", Sim
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
-	const reasoningEffort = supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning);
+	const xhighSupported = supportsXhigh(model);
+	const reasoningEffort: OpenAIResponsesOptions["reasoningEffort"] = xhighSupported
+		? clampMaxForOpenAI(options?.reasoning, true)
+		: clampReasoning(options?.reasoning);
 
 	return streamOpenAIResponses(model, context, {
 		...base,
@@ -245,6 +254,12 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 			params.reasoning = { effort: "none" };
 		}
 	}
+
+	applyExtraBody(
+		params as unknown as Record<string, unknown>,
+		options?.extraBody,
+		OPENAI_RESPONSES_RESERVED_BODY_KEYS,
+	);
 
 	return params;
 }

@@ -4,8 +4,8 @@ Pi uses JSON settings files with project settings overriding global settings.
 
 | Location | Scope |
 |----------|-------|
-| `~/.pi/agent/settings.json` | Global (all projects) |
-| `.pi/settings.json` | Project (current directory) |
+| `~/.senpi/agent/settings.json` | Global (all projects) |
+| `.senpi/settings.json` | Project (current directory) |
 
 Edit directly or use `/settings` for common options.
 
@@ -109,6 +109,22 @@ When a provider requests a retry delay longer than `retry.provider.maxRetryDelay
 | `followUpMode` | string | `"one-at-a-time"` | How follow-up messages are sent: `"all"` or `"one-at-a-time"` |
 | `transport` | string | `"sse"` | Preferred transport for providers that support multiple transports: `"sse"`, `"websocket"`, or `"auto"` |
 
+### OpenAI
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `openai.serviceTier` | string | - | Injects OpenAI Responses `service_tier`: `"auto"`, `"flex"`, or `"priority"` |
+
+```json
+{
+  "openai": {
+    "serviceTier": "priority"
+  }
+}
+```
+
+When unset, senpi leaves provider payloads unchanged. This setting currently applies only to the built-in OpenAI Responses provider path.
+
 ### Terminal & Images
 
 | Setting | Type | Default | Description |
@@ -169,7 +185,7 @@ When multiple sources specify a session directory, `--session-dir` CLI flag take
 
 These settings define where to load extensions, skills, prompts, and themes from.
 
-Paths in `~/.pi/agent/settings.json` resolve relative to `~/.pi/agent`. Paths in `.pi/settings.json` resolve relative to `.pi`. Absolute paths and `~` are supported.
+Paths in `~/.senpi/agent/settings.json` resolve relative to `~/.senpi/agent`. Paths in `.senpi/settings.json` resolve relative to `.senpi`. Absolute paths and `~` are supported.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -208,40 +224,68 @@ Object form filters which resources to load:
 
 See [packages.md](packages.md) for package management details.
 
+### Agent Defaults
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `agentDefaults.permission` | object | `{}` | Default tool permissions applied to all agents (lowest priority) |
+| `agentDefaults.model` | string | - | Default model ID for agents spawned via `task()` |
+
+Permission values: `"allow"`, `"deny"`, `"ask"`. See [agents.md](agents.md) for details.
+
+```json
+{
+   "agentDefaults": {
+      "permission": {
+         "edit": "ask",
+         "write": "ask",
+         "bash": "allow"
+      },
+      "model": "anthropic/claude-haiku-4-5"
+   }
+}
+```
+
 ## Example
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
-  "defaultThinkingLevel": "medium",
-  "theme": "dark",
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 16384,
-    "keepRecentTokens": 20000
-  },
-  "retry": {
-    "enabled": true,
-    "maxRetries": 3
-  },
-  "enabledModels": ["claude-*", "gpt-4o"],
-  "packages": ["pi-skills"]
+   "defaultProvider": "anthropic",
+   "defaultModel": "claude-sonnet-4-20250514",
+   "defaultThinkingLevel": "medium",
+   "theme": "dark",
+   "compaction": {
+      "enabled": true,
+      "reserveTokens": 16384,
+      "keepRecentTokens": 20000
+   },
+   "retry": {
+      "enabled": true,
+      "maxRetries": 3
+   },
+   "enabledModels": ["claude-*", "gpt-4o"],
+   "packages": ["pi-skills"],
+   "agentDefaults": {
+      "permission": {
+         "edit": "ask",
+         "write": "ask"
+      }
+   }
 }
 ```
 
 ## Project Overrides
 
-Project settings (`.pi/settings.json`) override global settings. Nested objects are merged:
+Project settings (`.senpi/settings.json`) override global settings. Nested objects are merged:
 
 ```json
-// ~/.pi/agent/settings.json (global)
+// ~/.senpi/agent/settings.json (global)
 {
   "theme": "dark",
   "compaction": { "enabled": true, "reserveTokens": 16384 }
 }
 
-// .pi/settings.json (project)
+// .senpi/settings.json (project)
 {
   "compaction": { "reserveTokens": 8192 }
 }

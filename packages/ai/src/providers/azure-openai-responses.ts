@@ -14,7 +14,13 @@ import type {
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { headersToRecord } from "../utils/headers.js";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.js";
-import { buildBaseOptions, clampReasoning } from "./simple-options.js";
+import {
+	applyExtraBody,
+	buildBaseOptions,
+	clampMaxForOpenAI,
+	clampReasoning,
+	OPENAI_RESPONSES_RESERVED_BODY_KEYS,
+} from "./simple-options.js";
 
 const DEFAULT_AZURE_API_VERSION = "v1";
 const AZURE_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode", "azure-openai-responses"]);
@@ -139,7 +145,10 @@ export const streamSimpleAzureOpenAIResponses: StreamFunction<"azure-openai-resp
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
-	const reasoningEffort = supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning);
+	const xhighSupported = supportsXhigh(model);
+	const reasoningEffort: AzureOpenAIResponsesOptions["reasoningEffort"] = xhighSupported
+		? clampMaxForOpenAI(options?.reasoning, true)
+		: clampReasoning(options?.reasoning);
 
 	return streamAzureOpenAIResponses(model, context, {
 		...base,
@@ -251,6 +260,12 @@ function buildParams(
 			params.reasoning = { effort: "none" };
 		}
 	}
+
+	applyExtraBody(
+		params as unknown as Record<string, unknown>,
+		options?.extraBody,
+		OPENAI_RESPONSES_RESERVED_BODY_KEYS,
+	);
 
 	return params;
 }

@@ -1,11 +1,12 @@
 import { join } from "node:path";
 import { Agent, type AgentMessage, type ThinkingLevel } from "@mariozechner/pi-agent-core";
-import { type Message, type Model, streamSimple } from "@mariozechner/pi-ai";
+import { type Api, type Message, type Model, streamSimple, supportsMax, supportsXhigh } from "@mariozechner/pi-ai";
 import { getAgentDir } from "../config.js";
 import { AgentSession } from "./agent-session.js";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.js";
 import { AuthStorage } from "./auth-storage.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
+import type { ServiceTier } from "./extensions/builtin/service-tier.js";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.js";
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
@@ -33,7 +34,7 @@ import {
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
-	/** Global config directory. Default: ~/.pi/agent */
+	/** Global config directory. Default: ~/.senpi/agent */
 	agentDir?: string;
 
 	/** Auth storage for credentials. Default: AuthStorage.create(agentDir/auth.json) */
@@ -46,7 +47,7 @@ export interface CreateAgentSessionOptions {
 	/** Thinking level. Default: from settings, else 'medium' (clamped to model capabilities) */
 	thinkingLevel?: ThinkingLevel;
 	/** Models available for cycling (Ctrl+P in interactive mode) */
-	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
+	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel; serviceTier?: ServiceTier }>;
 
 	/**
 	 * Optional default tool suppression mode when no explicit allowlist is provided.
@@ -248,10 +249,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
 	}
 
-	// Clamp to model capabilities
-	if (!model || !model.reasoning) {
-		thinkingLevel = "off";
-	}
+	thinkingLevel = clampThinkingLevelToModel(thinkingLevel, model);
 
 	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
@@ -327,6 +325,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					openRouterAttributionHeaders || auth.headers || options?.headers
 						? { ...openRouterAttributionHeaders, ...auth.headers, ...options?.headers }
 						: undefined,
+				extraBody: auth.extraBody || options?.extraBody ? { ...auth.extraBody, ...options?.extraBody } : undefined,
 			});
 		},
 		onPayload: async (payload, _model) => {
@@ -395,4 +394,28 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		extensionsResult,
 		modelFallbackMessage,
 	};
+}
+
+/**
+ * Clamp a requested thinking level to what the resolved model actually exposes.
+ *
+ * Capability tiers:
+ * - Non-reasoning model: everything collapses to "off".
+ * - No xhigh support:   xhigh and max both collapse to "high".
+ * - xhigh but no max:   max collapses to "xhigh" (currently GPT-5.2/5.3/5.4).
+ * - Native max support: xhigh and max are both preserved (Opus 4.6 / 4.7).
+ *
+ * This keeps session state aligned with `getAvailableThinkingLevels()` so the
+ * UI never claims a tier the provider will silently downgrade at request time.
+ */
+export function clampThinkingLevelToModel(
+	level: ThinkingLevel | undefined,
+	model: Model<Api> | undefined,
+): ThinkingLevel {
+	if (!model || !model.reasoning) return "off";
+	if (level === "max" && !supportsMax(model)) {
+		return supportsXhigh(model) ? "xhigh" : "high";
+	}
+	if (level === "xhigh" && !supportsXhigh(model)) return "high";
+	return level ?? "off";
 }

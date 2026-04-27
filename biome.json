@@ -35,6 +35,8 @@
 			"!**/models.generated.ts",
 			"!packages/web-ui/src/app.css",
 			"!packages/mom/data/**/*",
+			"!local-ignore/**/*",
+			"!.worktrees/**/*",
 			"!!**/node_modules"
 		]
 	}
