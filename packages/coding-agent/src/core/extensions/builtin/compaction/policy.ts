@@ -36,6 +36,21 @@ function adjustThresholdRatio(ratio: number, savedTokens: number, tokensBefore: 
 	return ratio;
 }
 
+function adjustEffectiveThresholdRatio(ratio: number, savedTokens: number, tokensBefore: number): number {
+	if (tokensBefore <= 0) {
+		return ratio;
+	}
+
+	const savedRatio = savedTokens / tokensBefore;
+	if (savedRatio > HIGH_YIELD_SAVING_RATIO) {
+		return ratio - YIELD_ADJUSTMENT_RATIO;
+	}
+	if (savedRatio < LOW_YIELD_SAVING_RATIO) {
+		return ratio + YIELD_ADJUSTMENT_RATIO;
+	}
+	return ratio;
+}
+
 export function computeAdaptiveThresholdRatio(contextWindow: number, priorCompactionSavedTokens?: number): number {
 	let ratio: number;
 	if (!(contextWindow > 0)) {
@@ -64,11 +79,11 @@ export function computeEffectiveThreshold(contextWindow: number, lastYield?: Com
 		return Math.max(contextWindow, lastYield);
 	}
 
-	let ratio = computeAdaptiveThresholdRatio(contextWindow);
+	let ratio = Math.max(computeAdaptiveThresholdRatio(contextWindow), OMO_THRESHOLD_FLOOR_RATIO);
 	if (lastYield) {
-		ratio = adjustThresholdRatio(ratio, lastYield.savedTokens, lastYield.tokensBefore);
+		ratio = adjustEffectiveThresholdRatio(ratio, lastYield.savedTokens, lastYield.tokensBefore);
 	}
-	return Math.max(ratio, OMO_THRESHOLD_FLOOR_RATIO);
+	return ratio;
 }
 
 export function shouldTriggerCompaction(

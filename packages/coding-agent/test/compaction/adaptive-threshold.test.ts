@@ -8,12 +8,6 @@ import {
 } from "../../src/core/extensions/builtin/compaction/policy.js";
 import { migrateSessionEntries, parseSessionEntries, type SessionEntry } from "../../src/core/session-manager.js";
 
-type AdaptiveRatioFn = (contextWindow: number, priorCompactionSavedTokens?: number) => number;
-type EffectiveThresholdFn = (baseRatio: number, floorRatio: number) => number;
-
-const adaptiveRatio = computeAdaptiveThresholdRatio as unknown as AdaptiveRatioFn;
-const effectiveThreshold = computeEffectiveThreshold as unknown as EffectiveThresholdFn;
-
 const HIGH_YIELD_SAVED_TOKENS = 9000;
 const LOW_YIELD_SAVED_TOKENS = 500;
 const OMO_FLOOR_RATIO = 0.78;
@@ -56,7 +50,11 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				expect(model?.contextWindow).toBe(16000);
 				expect(adaptiveFixtureEntries.length).toBeGreaterThan(0);
 
-				const ratio = adaptiveRatio(model!.contextWindow);
+				if (!model) {
+					throw new Error("faux-16k model was not registered");
+				}
+
+				const ratio = computeAdaptiveThresholdRatio(model.contextWindow);
 
 				expect(ratio).toBe(0.45);
 			});
@@ -71,7 +69,12 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const ratio = adaptiveRatio(registration.getModel("faux-32k")!.contextWindow);
+				const model = registration.getModel("faux-32k");
+				if (!model) {
+					throw new Error("faux-32k model was not registered");
+				}
+
+				const ratio = computeAdaptiveThresholdRatio(model.contextWindow);
 
 				expect(ratio).toBe(0.5);
 			});
@@ -86,7 +89,12 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const ratio = adaptiveRatio(registration.getModel("faux-64k")!.contextWindow);
+				const model = registration.getModel("faux-64k");
+				if (!model) {
+					throw new Error("faux-64k model was not registered");
+				}
+
+				const ratio = computeAdaptiveThresholdRatio(model.contextWindow);
 
 				expect(ratio).toBe(0.55);
 			});
@@ -101,7 +109,12 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const ratio = adaptiveRatio(registration.getModel("faux-128k")!.contextWindow);
+				const model = registration.getModel("faux-128k");
+				if (!model) {
+					throw new Error("faux-128k model was not registered");
+				}
+
+				const ratio = computeAdaptiveThresholdRatio(model.contextWindow);
 
 				expect(ratio).toBe(0.6);
 			});
@@ -116,7 +129,12 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const ratio = adaptiveRatio(registration.getModel("faux-200k")!.contextWindow);
+				const model = registration.getModel("faux-200k");
+				if (!model) {
+					throw new Error("faux-200k model was not registered");
+				}
+
+				const ratio = computeAdaptiveThresholdRatio(model.contextWindow);
 
 				expect(ratio).toBe(0.65);
 			});
@@ -131,10 +149,15 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const baseRatio = adaptiveRatio(registration.getModel("faux-32k")!.contextWindow);
+				const model = registration.getModel("faux-32k");
+				if (!model) {
+					throw new Error("faux-32k model was not registered");
+				}
+
+				const baseRatio = computeAdaptiveThresholdRatio(model.contextWindow);
 				expect(baseRatio).toBe(0.5);
 
-				const effective = effectiveThreshold(baseRatio, OMO_FLOOR_RATIO);
+				const effective = computeEffectiveThreshold(model.contextWindow);
 
 				expect(effective).toBe(OMO_FLOOR_RATIO);
 				expect(effective).toBe(Math.max(baseRatio, OMO_FLOOR_RATIO));
@@ -150,11 +173,13 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const baselineRatio = adaptiveRatio(registration.getModel("faux-16k-high-yield")!.contextWindow);
-				const adjustedRatio = adaptiveRatio(
-					registration.getModel("faux-16k-high-yield")!.contextWindow,
-					HIGH_YIELD_SAVED_TOKENS,
-				);
+				const model = registration.getModel("faux-16k-high-yield");
+				if (!model) {
+					throw new Error("faux-16k-high-yield model was not registered");
+				}
+
+				const baselineRatio = computeAdaptiveThresholdRatio(model.contextWindow);
+				const adjustedRatio = computeAdaptiveThresholdRatio(model.contextWindow, HIGH_YIELD_SAVED_TOKENS);
 
 				expect(baselineRatio).toBe(0.45);
 				expect(adjustedRatio).toBe(0.4);
@@ -171,15 +196,67 @@ describe("compaction policy: adaptive threshold ratio", () => {
 				});
 				registrations.push(registration);
 
-				const baselineRatio = adaptiveRatio(registration.getModel("faux-16k-low-yield")!.contextWindow);
-				const adjustedRatio = adaptiveRatio(
-					registration.getModel("faux-16k-low-yield")!.contextWindow,
-					LOW_YIELD_SAVED_TOKENS,
-				);
+				const model = registration.getModel("faux-16k-low-yield");
+				if (!model) {
+					throw new Error("faux-16k-low-yield model was not registered");
+				}
+
+				const baselineRatio = computeAdaptiveThresholdRatio(model.contextWindow);
+				const adjustedRatio = computeAdaptiveThresholdRatio(model.contextWindow, LOW_YIELD_SAVED_TOKENS);
 
 				expect(baselineRatio).toBe(0.45);
 				expect(adjustedRatio).toBe(0.5);
 				expect(adjustedRatio).toBeLessThanOrEqual(0.7);
+			});
+		});
+	});
+
+	describe("Given context window 32000 with a high-yield prior compaction", () => {
+		describe("When the effective threshold is computed after applying the omo floor", () => {
+			it("Then the yield adjustment remains observable below the floor", () => {
+				// given
+				const registration = registerFauxProvider({
+					models: [{ id: "faux-32k-effective-high-yield", contextWindow: 32000 }],
+				});
+				registrations.push(registration);
+				const model = registration.getModel("faux-32k-effective-high-yield");
+				if (!model) {
+					throw new Error("faux-32k-effective-high-yield model was not registered");
+				}
+
+				// when
+				const effective = computeEffectiveThreshold(model.contextWindow, {
+					savedTokens: HIGH_YIELD_SAVED_TOKENS,
+					tokensBefore: 16000,
+				});
+
+				// then
+				expect(effective).toBe(OMO_FLOOR_RATIO - 0.05);
+			});
+		});
+	});
+
+	describe("Given context window 32000 with a low-yield prior compaction", () => {
+		describe("When the effective threshold is computed after applying the omo floor", () => {
+			it("Then the yield adjustment remains observable above the floor", () => {
+				// given
+				const registration = registerFauxProvider({
+					models: [{ id: "faux-32k-effective-low-yield", contextWindow: 32000 }],
+				});
+				registrations.push(registration);
+				const model = registration.getModel("faux-32k-effective-low-yield");
+				if (!model) {
+					throw new Error("faux-32k-effective-low-yield model was not registered");
+				}
+
+				// when
+				const effective = computeEffectiveThreshold(model.contextWindow, {
+					savedTokens: LOW_YIELD_SAVED_TOKENS,
+					tokensBefore: 16000,
+				});
+
+				// then
+				expect(effective).toBe(OMO_FLOOR_RATIO + 0.05);
 			});
 		});
 	});
