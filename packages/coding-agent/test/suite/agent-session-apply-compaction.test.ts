@@ -38,7 +38,7 @@ describe("AgentSession applyCompaction", () => {
 
 		// when
 		const result = await harness.session.applyCompaction(precomputed, {
-			reason: "speculative",
+			reason: "extension",
 			expectedRevision,
 		});
 
@@ -59,7 +59,7 @@ describe("AgentSession applyCompaction", () => {
 
 		// when
 		const result = await harness.session.applyCompaction(precomputed, {
-			reason: "speculative",
+			reason: "extension",
 			expectedRevision,
 		});
 
@@ -81,7 +81,7 @@ describe("AgentSession applyCompaction", () => {
 		const afterPromptRevision = harness.session.getMessageRevision();
 		const precomputed = createPrecomputedCompaction(harness, "monotonic summary");
 		await harness.session.applyCompaction(precomputed, {
-			reason: "speculative",
+			reason: "extension",
 			expectedRevision: afterPromptRevision,
 		});
 		const afterCompactionRevision = harness.session.getMessageRevision();

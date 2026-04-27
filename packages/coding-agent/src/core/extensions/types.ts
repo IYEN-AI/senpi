@@ -84,7 +84,7 @@ export type { AppKeybinding, KeybindingsManager } from "../keybindings.js";
 
 export type ServiceTier = "auto" | "flex" | "priority";
 // biome-ignore format: keep literal union alias consistent with nearby ServiceTier style.
-export type CompactionReason = "manual" | "threshold" | "overflow" | "pre_prompt" | "branch" | "extension" | "speculative";
+export type CompactionReason = "manual" | "threshold" | "overflow" | "pre_prompt" | "branch" | "extension";
 export type CompactionRejectionCause = "cancelled-by-extension" | "would-overflow" | "circuit-breaker" | "per-turn-cap";
 
 // ============================================================================
