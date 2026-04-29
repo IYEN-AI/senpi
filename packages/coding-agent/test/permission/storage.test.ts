@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONFIG_DIR_NAME } from "../../src/config.js";
 import {
 	appendApproved,
 	clearApproved,
@@ -47,7 +48,7 @@ describe("permission storage", () => {
 
 		it("skips malformed lines and returns valid rules", () => {
 			// given
-			const piDir = path.join(tempDir, ".pi");
+			const piDir = path.join(tempDir, CONFIG_DIR_NAME);
 			fs.mkdirSync(piDir, { recursive: true });
 			const filePath = path.join(piDir, "permissions-approved.jsonl");
 			fs.writeFileSync(
@@ -75,7 +76,7 @@ describe("permission storage", () => {
 			appendApproved(tempDir, rules);
 
 			// then
-			const piDir = path.join(tempDir, ".pi");
+			const piDir = path.join(tempDir, CONFIG_DIR_NAME);
 			expect(fs.existsSync(piDir)).toBe(true);
 		});
 
@@ -90,7 +91,7 @@ describe("permission storage", () => {
 			appendApproved(tempDir, rules);
 
 			// then
-			const filePath = path.join(tempDir, ".pi", "permissions-approved.jsonl");
+			const filePath = path.join(tempDir, CONFIG_DIR_NAME, "permissions-approved.jsonl");
 			const content = fs.readFileSync(filePath, "utf-8");
 			const lines = content.trim().split("\n");
 			expect(lines).toHaveLength(2);
@@ -117,7 +118,7 @@ describe("permission storage", () => {
 			appendApproved(tempDir, []);
 
 			// then
-			const filePath = path.join(tempDir, ".pi", "permissions-approved.jsonl");
+			const filePath = path.join(tempDir, CONFIG_DIR_NAME, "permissions-approved.jsonl");
 			expect(fs.existsSync(filePath)).toBe(false);
 		});
 	});
@@ -127,7 +128,7 @@ describe("permission storage", () => {
 			// given
 			const rules: Rule[] = [{ permission: "bash", pattern: "*", action: "allow" }];
 			appendApproved(tempDir, rules);
-			const filePath = path.join(tempDir, ".pi", "permissions-approved.jsonl");
+			const filePath = path.join(tempDir, CONFIG_DIR_NAME, "permissions-approved.jsonl");
 			expect(fs.existsSync(filePath)).toBe(true);
 
 			// when

@@ -13,7 +13,7 @@ declare global {
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
 	const matchedRule = rulesets.flat().findLast((rule) => {
-		return Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern);
+		return Wildcard.match(permission, rule.permission) && matchesPattern(pattern, rule.pattern);
 	});
 
 	if (matchedRule) {
@@ -21,4 +21,8 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Rules
 	}
 
 	return { action: "ask", permission, pattern: "*" };
+}
+
+function matchesPattern(value: string, pattern: string): boolean {
+	return Wildcard.match(value, pattern) || (pattern.endsWith(" *") && Wildcard.match(value, pattern.slice(0, -2)));
 }

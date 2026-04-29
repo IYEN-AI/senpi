@@ -493,7 +493,9 @@ function handleContentBlockStop(
  * whose ARNs don't contain the model name.
  */
 function supportsAdaptiveThinking(modelId: string, modelName?: string): boolean {
-	const candidates = modelName ? [modelId, modelName] : [modelId];
+	const candidates = modelName
+		? [normalizeModelName(modelId), normalizeModelName(modelName)]
+		: [normalizeModelName(modelId)];
 	return candidates.some(
 		(s) =>
 			s.includes("opus-4-6") ||
@@ -510,7 +512,9 @@ function mapThinkingLevelToEffort(
 	modelId: string,
 	modelName?: string,
 ): "low" | "medium" | "high" | "xhigh" | "max" {
-	const candidates = modelName ? [modelId, modelName] : [modelId];
+	const candidates = modelName
+		? [normalizeModelName(modelId), normalizeModelName(modelName)]
+		: [normalizeModelName(modelId)];
 	const isOpus47 = candidates.some((s) => s.includes("opus-4-7") || s.includes("opus-4.7"));
 	const isOpus46 = candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4.6"));
 	switch (level) {
@@ -531,6 +535,10 @@ function mapThinkingLevelToEffort(
 		default:
 			return "high";
 	}
+}
+
+function normalizeModelName(value: string): string {
+	return value.toLowerCase().replace(/[\s_]+/g, "-");
 }
 
 /**
@@ -577,9 +585,9 @@ function isAnthropicClaudeModel(model: Model<"bedrock-converse-stream">): boolea
  * Amazon Nova models have automatic caching and don't need explicit cache points.
  */
 function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean {
-	const candidates = [model.id.toLowerCase()];
+	const candidates = [normalizeModelName(model.id)];
 	if (model.name) {
-		candidates.push(model.name.toLowerCase());
+		candidates.push(normalizeModelName(model.name));
 	}
 
 	const hasClaudeRef = candidates.some((s) => s.includes("claude"));

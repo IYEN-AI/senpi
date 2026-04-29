@@ -5,6 +5,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CONFIG_DIR_NAME } from "../../src/config.js";
 import { parsePermissionFlag } from "../../src/core/extensions/builtin/permission-system/cli.js";
 import { theme } from "../../src/modes/interactive/theme/theme.js";
 import { createHarness, getMessageText, type Harness } from "./harness.js";
@@ -76,7 +77,7 @@ function createMockUI(selections: (string | undefined)[], inputValue?: string) {
 }
 
 async function writeSettings(harness: Harness, permissionConfig: Record<string, unknown>): Promise<void> {
-	const piDir = path.join(harness.tempDir, ".pi");
+	const piDir = path.join(harness.tempDir, CONFIG_DIR_NAME);
 	fs.mkdirSync(piDir, { recursive: true });
 	fs.writeFileSync(path.join(piDir, "settings.json"), JSON.stringify({ permission: permissionConfig }, null, 3));
 }
@@ -152,7 +153,7 @@ describe("F3 Final QA - Permission System End-to-End", () => {
 
 			expect(executedCommands).toEqual([]);
 			const lastMessage = getMessageText(getMessageFromEnd(harness, 1));
-			expect(lastMessage).toContain("rejected");
+			expect(lastMessage).toContain("prevents");
 		});
 	});
 
@@ -182,7 +183,7 @@ describe("F3 Final QA - Permission System End-to-End", () => {
 
 			await harness.session.reload();
 
-			const permissionsPath = path.join(harness.tempDir, ".pi", "permissions-approved.jsonl");
+			const permissionsPath = path.join(harness.tempDir, CONFIG_DIR_NAME, "permissions-approved.jsonl");
 			expect(fs.existsSync(permissionsPath)).toBe(true);
 
 			const content = fs.readFileSync(permissionsPath, "utf-8");

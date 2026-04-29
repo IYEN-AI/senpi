@@ -6,6 +6,7 @@ import type { AgentTool, ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CONFIG_DIR_NAME } from "../../../src/config.js";
 import { AuthStorage } from "../../../src/core/auth-storage.js";
 import { DEFAULT_COMPACTION_SETTINGS } from "../../../src/core/compaction/index.js";
 import { ExtensionRunner } from "../../../src/core/extensions/runner.js";
@@ -44,7 +45,7 @@ function createEchoTool(onExecute?: (text: string) => void): AgentTool {
 }
 
 async function writePermissionSettings(tempDir: string, permissionConfig: Record<string, unknown>): Promise<void> {
-	const piDir = path.join(tempDir, ".pi");
+	const piDir = path.join(tempDir, CONFIG_DIR_NAME);
 	await fs.mkdir(piDir, { recursive: true });
 	await fs.writeFile(path.join(piDir, "settings.json"), JSON.stringify({ permission: permissionConfig }, null, 3));
 }
