@@ -755,7 +755,21 @@ export class ExtensionRunner {
 				try {
 					const handlerResult = await handler(event, ctx);
 					if (handlerResult) {
-						result = handlerResult as ModelSelectEventResult;
+						const nextResult = handlerResult as ModelSelectEventResult;
+						if (nextResult.systemPrompt !== undefined || nextResult.systemPromptName !== undefined) {
+							const combinedResult: ModelSelectEventResult = {};
+							if (nextResult.systemPrompt !== undefined) {
+								combinedResult.systemPrompt = nextResult.systemPrompt;
+							} else if (result?.systemPrompt !== undefined) {
+								combinedResult.systemPrompt = result.systemPrompt;
+							}
+							if (nextResult.systemPromptName !== undefined) {
+								combinedResult.systemPromptName = nextResult.systemPromptName;
+							} else if (result?.systemPromptName !== undefined) {
+								combinedResult.systemPromptName = result.systemPromptName;
+							}
+							result = combinedResult;
+						}
 					}
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);

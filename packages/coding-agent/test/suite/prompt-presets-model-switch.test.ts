@@ -30,6 +30,7 @@ describe("prompt preset model switching", () => {
 			extensionFactories: [
 				promptPresetExtension,
 				(pi) => {
+					pi.on("model_select", () => ({}));
 					pi.on("system_prompt_change", (event) => {
 						extensionEvents.push(
 							`${event.previousModel?.id ?? "none"}->${event.model.id}:${event.systemPromptName}`,
