@@ -1,5 +1,36 @@
 # Core Extensions Changes
 
+## 2026-04-30 - Model Switch System Prompt Change Event
+
+### What changed
+
+- `types.ts`: Added `ModelSelectEventResult` and `SystemPromptChangeEvent`, plus `pi.on("system_prompt_change", ...)` typing.
+- `runner.ts`: Added `emitModelSelect()` so `model_select` handlers can request an active system prompt replacement.
+- `builtin/prompt-preset/index.ts`: Returns the resolved prompt preset during `model_select`, including fallback reset when no preset applies.
+
+### Why
+
+- Prompt presets previously updated the system prompt only at `before_agent_start`, so a mid-session model switch did not immediately update the active prompt or expose a typed event for observers.
+
+### Why extension system couldn't handle this alone
+
+- Extensions could listen to `model_select`, but the runner ignored handler return values and there was no typed `pi.on` event for the resulting system prompt change.
+
+### Files modified
+
+- `types.ts`
+- `runner.ts`
+- `builtin/prompt-preset/index.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- HIGH: `types.ts` around model/agent event unions and `ExtensionAPI.on` overloads.
+- HIGH: `runner.ts` around event emission helpers.
+
+### Migration notes
+
+- Preserve the invariant that `system_prompt_change` fires only after the active prompt string actually changes.
+
 ## 2026-04-28 - Compaction Settings Context API
 
 ### What changed

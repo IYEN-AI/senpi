@@ -1,5 +1,33 @@
 # changes
 
+## Model Switch System Prompt Change (2026-04-30)
+
+### What changed
+
+- `src/core/agent-session.ts`: Applies `model_select` system prompt results immediately, emits `system_prompt_change` only when the active prompt string changes, and returns the change from `setModel()` / `cycleModel()`.
+- `src/core/extensions/types.ts`: Added typed `system_prompt_change` event and model-select prompt-change result.
+- `src/core/extensions/runner.ts`: Added `emitModelSelect()` to collect prompt-change results from `model_select` handlers.
+- `src/modes/interactive/interactive-mode.ts`: Includes the changed prompt name in model-switch status messages and shows standalone prompt-change status for extension-driven switches.
+- `src/core/extensions/builtin/prompt-preset/index.ts`: Resolves prompt presets during `model_select` so mid-session model changes update the active prompt immediately.
+
+### Why
+
+- The prompt-preset builtin only changed the effective prompt at the next `before_agent_start`. The user requested mid-session model changes to switch the system prompt immediately, emit a `pi.on` event, and show the TUI notice only when the prompt actually changes.
+
+### Why extension system couldn't handle this
+
+- The existing extension event runner ignored `model_select` return values and had no core-owned typed event for active system prompt changes. TUI status also needs core session feedback from `setModel()` / `cycleModel()`.
+
+### Expected merge conflict zones on next upstream sync
+
+- HIGH: `agent-session.ts` around model switching and event emission.
+- HIGH: `extensions/types.ts` and `extensions/runner.ts` around model events.
+- MEDIUM: `interactive-mode.ts` model status rendering.
+
+### Migration notes
+
+- Keep `system_prompt_change` gated by actual string inequality. Same-preset model switches must not spam the event or TUI.
+
 ## Seam 3: Compaction Apply ExtensionContext API (2026-04-27)
 
 ### What changed

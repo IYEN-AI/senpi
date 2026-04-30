@@ -95,6 +95,7 @@ export type {
 	MessageStartEvent,
 	MessageUpdateEvent,
 	ModelSelectEvent,
+	ModelSelectEventResult,
 	ModelSelectSource,
 	// Provider Registration
 	ProviderConfig,
@@ -129,6 +130,7 @@ export type {
 	SetLabelHandler,
 	SetModelHandler,
 	SetThinkingLevelHandler,
+	SystemPromptChangeEvent,
 	TerminalInputHandler,
 	// Events - Tool
 	ToolCallEvent,

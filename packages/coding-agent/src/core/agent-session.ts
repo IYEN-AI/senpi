@@ -62,6 +62,7 @@ import {
 	type SessionBeforeTreeResult,
 	type SessionStartEvent,
 	type ShutdownHandler,
+	type SystemPromptChangeEvent,
 	type ToolDefinition,
 	type ToolExecutionEndEvent,
 	type ToolExecutionStartEvent,
@@ -134,6 +135,7 @@ export type AgentSessionEvent =
 	  }
 	| { type: "compaction_start"; reason: CompactionReason }
 	| { type: "session_info_changed"; name: string | undefined }
+	| SystemPromptChangeEvent
 	| {
 			type: "compaction_end";
 			reason: CompactionReason;
@@ -242,6 +244,8 @@ export interface ModelCycleResult {
 	thinkingLevel: ThinkingLevel;
 	/** Whether cycling through scoped models (--models flag) or all available */
 	isScoped: boolean;
+	/** Present when the model switch also changed the active system prompt. */
+	systemPromptChange?: SystemPromptChangeEvent;
 }
 
 /** Session statistics for /session command */
@@ -1441,14 +1445,41 @@ export class AgentSession {
 		nextModel: Model<any>,
 		previousModel: Model<any> | undefined,
 		source: "set" | "cycle" | "restore",
-	): Promise<void> {
-		if (modelsAreEqual(previousModel, nextModel)) return;
-		await this._extensionRunner.emit({
+	): Promise<SystemPromptChangeEvent | undefined> {
+		if (modelsAreEqual(previousModel, nextModel)) return undefined;
+		const result = await this._extensionRunner.emitModelSelect({
 			type: "model_select",
 			model: nextModel,
 			previousModel,
 			source,
+			systemPrompt: this.agent.state.systemPrompt,
+			systemPromptOptions: this._baseSystemPromptOptions,
 		});
+		if (result?.systemPrompt === undefined) {
+			return undefined;
+		}
+
+		const previousSystemPrompt = this.agent.state.systemPrompt;
+		const systemPrompt = result.systemPrompt ?? this._baseSystemPrompt;
+		if (previousSystemPrompt === systemPrompt) {
+			return undefined;
+		}
+
+		this.agent.state.systemPrompt = systemPrompt;
+		const event: SystemPromptChangeEvent = {
+			type: "system_prompt_change",
+			systemPrompt,
+			previousSystemPrompt,
+			model: nextModel,
+			previousModel,
+			source: "model_select",
+		};
+		if (result.systemPromptName) {
+			event.systemPromptName = result.systemPromptName;
+		}
+		await this._extensionRunner.emit(event);
+		this._emit(event);
+		return event;
 	}
 
 	/**
@@ -1456,7 +1487,7 @@ export class AgentSession {
 	 * Validates that auth is configured, saves to session and settings.
 	 * @throws Error if no auth is configured for the model
 	 */
-	async setModel(model: Model<any>): Promise<void> {
+	async setModel(model: Model<any>): Promise<SystemPromptChangeEvent | undefined> {
 		if (!this._modelRegistry.hasConfiguredAuth(model)) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
@@ -1472,7 +1503,7 @@ export class AgentSession {
 
 		this.setThinkingLevel(thinkingLevel);
 
-		await this._emitModelSelect(model, previousModel, "set");
+		return await this._emitModelSelect(model, previousModel, "set");
 	}
 
 	/**
@@ -1512,13 +1543,17 @@ export class AgentSession {
 		// setThinkingLevel clamps to model capabilities.
 		this.setThinkingLevel(thinkingLevel);
 
-		await this._emitModelSelect(next.model, currentModel, "cycle");
+		const systemPromptChange = await this._emitModelSelect(next.model, currentModel, "cycle");
 
-		return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
+		const cycleResult: ModelCycleResult = { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
+		if (systemPromptChange) {
+			cycleResult.systemPromptChange = systemPromptChange;
+		}
+		return cycleResult;
 	}
 
 	private async _cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const availableModels = await this._modelRegistry.getAvailable();
+		const availableModels = this._modelRegistry.getAvailable();
 		if (availableModels.length <= 1) return undefined;
 
 		const currentModel = this.model;
@@ -1537,9 +1572,13 @@ export class AgentSession {
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(thinkingLevel);
 
-		await this._emitModelSelect(nextModel, currentModel, "cycle");
+		const systemPromptChange = await this._emitModelSelect(nextModel, currentModel, "cycle");
 
-		return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
+		const cycleResult: ModelCycleResult = { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
+		if (systemPromptChange) {
+			cycleResult.systemPromptChange = systemPromptChange;
+		}
+		return cycleResult;
 	}
 
 	// =========================================================================

@@ -6,17 +6,19 @@ import { resolvePreset } from "./presets.js";
 import { loadPromptPresetSettings } from "./settings.js";
 
 function createToolSectionBuilder(event: {
-	systemPromptOptions: {
-		selectedTools?: string[];
-		toolSnippets?: Record<string, string>;
-		promptGuidelines?: string[];
-	};
+	systemPromptOptions:
+		| {
+				selectedTools?: string[];
+				toolSnippets?: Record<string, string>;
+				promptGuidelines?: string[];
+		  }
+		| undefined;
 }): () => string {
 	return () =>
 		buildToolSection({
-			tools: categorizeTools(event.systemPromptOptions.selectedTools ?? []),
-			toolSnippets: event.systemPromptOptions.toolSnippets ?? {},
-			promptGuidelines: event.systemPromptOptions.promptGuidelines ?? [],
+			tools: categorizeTools(event.systemPromptOptions?.selectedTools ?? []),
+			toolSnippets: event.systemPromptOptions?.toolSnippets ?? {},
+			promptGuidelines: event.systemPromptOptions?.promptGuidelines ?? [],
 		});
 }
 
@@ -61,5 +63,10 @@ export default function promptPresetExtension(pi: ExtensionAPI): void {
 
 	pi.on("model_select", async (event, ctx) => {
 		refreshHeader(ctx, event);
+		const preset = resolvePreset(event.model, getSettings(ctx), createToolSectionBuilder(event));
+		return {
+			systemPrompt: preset?.prompt ?? null,
+			systemPromptName: preset?.name ?? "fallback (senpi-current)",
+		};
 	});
 }

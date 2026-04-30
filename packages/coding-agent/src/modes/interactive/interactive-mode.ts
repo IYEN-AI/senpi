@@ -2710,6 +2710,12 @@ export class InteractiveMode {
 				this.ui.requestRender();
 				break;
 
+			case "system_prompt_change":
+				this.showStatus(
+					event.systemPromptName ? `System prompt: ${event.systemPromptName}` : "System prompt changed",
+				);
+				break;
+
 			case "session_info_changed":
 				this.updateTerminalTitle();
 				this.footer.invalidate();
@@ -3418,7 +3424,10 @@ export class InteractiveMode {
 				this.updateEditorBorderColor();
 				const thinkingStr =
 					result.model.reasoning && result.thinkingLevel !== "off" ? ` (thinking: ${result.thinkingLevel})` : "";
-				this.showStatus(`Switched to ${result.model.name || result.model.id}${thinkingStr}`);
+				const systemPromptStr = result.systemPromptChange?.systemPromptName
+					? `, system prompt: ${result.systemPromptChange.systemPromptName}`
+					: "";
+				this.showStatus(`Switched to ${result.model.name || result.model.id}${thinkingStr}${systemPromptStr}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(result.model);
 			}
 		} catch (error) {
@@ -3936,10 +3945,13 @@ export class InteractiveMode {
 		const model = await this.findExactModelMatch(searchTerm);
 		if (model) {
 			try {
-				await this.session.setModel(model);
+				const systemPromptChange = await this.session.setModel(model);
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
-				this.showStatus(`Model: ${model.id}`);
+				const systemPromptStr = systemPromptChange?.systemPromptName
+					? ` (system prompt: ${systemPromptChange.systemPromptName})`
+					: "";
+				this.showStatus(`Model: ${model.id}${systemPromptStr}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 				this.checkDaxnutsEasterEgg(model);
 			} catch (error) {
@@ -4018,11 +4030,14 @@ export class InteractiveMode {
 				this.session.scopedModels,
 				async (model) => {
 					try {
-						await this.session.setModel(model);
+						const systemPromptChange = await this.session.setModel(model);
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
 						done();
-						this.showStatus(`Model: ${model.id}`);
+						const systemPromptStr = systemPromptChange?.systemPromptName
+							? ` (system prompt: ${systemPromptChange.systemPromptName})`
+							: "";
+						this.showStatus(`Model: ${model.id}${systemPromptStr}`);
 						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 						this.checkDaxnutsEasterEgg(model);
 					} catch (error) {
@@ -4555,6 +4570,7 @@ export class InteractiveMode {
 		const actionLabel = authType === "oauth" ? `Logged in to ${providerName}` : `Saved API key for ${providerName}`;
 
 		let selectedModel: Model<any> | undefined;
+		let systemPromptName: string | undefined;
 		let selectionError: string | undefined;
 		if (isUnknownModel(previousModel)) {
 			const availableModels = this.session.modelRegistry.getAvailable();
@@ -4570,7 +4586,7 @@ export class InteractiveMode {
 					selectionError = `${actionLabel}, but its default model "${defaultModelId}" is not available. Use /model to select a model.`;
 				} else {
 					try {
-						await this.session.setModel(selectedModel);
+						systemPromptName = (await this.session.setModel(selectedModel))?.systemPromptName;
 					} catch (error: unknown) {
 						selectedModel = undefined;
 						const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4584,7 +4600,10 @@ export class InteractiveMode {
 		this.footer.invalidate();
 		this.updateEditorBorderColor();
 		if (selectedModel) {
-			this.showStatus(`${actionLabel}. Selected ${selectedModel.id}. Credentials saved to ${getAuthPath()}`);
+			const systemPromptStr = systemPromptName ? ` System prompt: ${systemPromptName}.` : "";
+			this.showStatus(
+				`${actionLabel}. Selected ${selectedModel.id}.${systemPromptStr} Credentials saved to ${getAuthPath()}`,
+			);
 			void this.maybeWarnAboutAnthropicSubscriptionAuth(selectedModel);
 			this.checkDaxnutsEasterEgg(selectedModel);
 		} else {

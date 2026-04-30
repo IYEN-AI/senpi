@@ -755,6 +755,28 @@ export interface ModelSelectEvent {
 	model: Model<any>;
 	previousModel: Model<any> | undefined;
 	source: ModelSelectSource;
+	/** The active system prompt before model_select handlers run. */
+	systemPrompt: string;
+	/** Structured options used to build the base system prompt. */
+	systemPromptOptions: BuildSystemPromptOptions;
+}
+
+export interface ModelSelectEventResult {
+	/** Replace the active system prompt after the model switch. `null` resets to the base senpi prompt. */
+	systemPrompt?: string | null;
+	/** Human-readable name for the prompt that became active. */
+	systemPromptName?: string;
+}
+
+/** Fired when the active system prompt changes. */
+export interface SystemPromptChangeEvent {
+	type: "system_prompt_change";
+	systemPrompt: string;
+	previousSystemPrompt: string;
+	systemPromptName?: string;
+	model: Model<any>;
+	previousModel: Model<any> | undefined;
+	source: "model_select";
 }
 
 // ============================================================================
@@ -997,6 +1019,7 @@ export type ExtensionEvent =
 	| ToolExecutionUpdateEvent
 	| ToolExecutionEndEvent
 	| ModelSelectEvent
+	| SystemPromptChangeEvent
 	| UserBashEvent
 	| InputEvent
 	| ToolCallEvent
@@ -1144,7 +1167,8 @@ export interface ExtensionAPI {
 	on(event: "tool_execution_start", handler: ExtensionHandler<ToolExecutionStartEvent>): void;
 	on(event: "tool_execution_update", handler: ExtensionHandler<ToolExecutionUpdateEvent>): void;
 	on(event: "tool_execution_end", handler: ExtensionHandler<ToolExecutionEndEvent>): void;
-	on(event: "model_select", handler: ExtensionHandler<ModelSelectEvent>): void;
+	on(event: "model_select", handler: ExtensionHandler<ModelSelectEvent, ModelSelectEventResult>): void;
+	on(event: "system_prompt_change", handler: ExtensionHandler<SystemPromptChangeEvent>): void;
 	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): void;
 	on(event: "user_bash", handler: ExtensionHandler<UserBashEvent, UserBashEventResult>): void;

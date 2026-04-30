@@ -35,6 +35,8 @@ import type {
 	InputEventResult,
 	InputSource,
 	MessageRenderer,
+	ModelSelectEvent,
+	ModelSelectEventResult,
 	ProviderConfig,
 	RegisteredCommand,
 	RegisteredTool,
@@ -119,6 +121,7 @@ type RunnerEmitEvent = Exclude<
 	| ContextEvent
 	| BeforeProviderRequestEvent
 	| BeforeAgentStartEvent
+	| ModelSelectEvent
 	| ResourcesDiscoverEvent
 	| InputEvent
 >;
@@ -738,6 +741,36 @@ export class ExtensionRunner {
 		}
 
 		return result as RunnerEmitResult<TEvent>;
+	}
+
+	async emitModelSelect(event: ModelSelectEvent): Promise<ModelSelectEventResult | undefined> {
+		const ctx = this.createContext();
+		let result: ModelSelectEventResult | undefined;
+
+		for (const ext of this.extensions) {
+			const handlers = ext.handlers.get("model_select");
+			if (!handlers || handlers.length === 0) continue;
+
+			for (const handler of handlers) {
+				try {
+					const handlerResult = await handler(event, ctx);
+					if (handlerResult) {
+						result = handlerResult as ModelSelectEventResult;
+					}
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					this.emitError({
+						extensionPath: ext.path,
+						event: "model_select",
+						error: message,
+						stack,
+					});
+				}
+			}
+		}
+
+		return result;
 	}
 
 	async emitToolResult(event: ToolResultEvent): Promise<ToolResultEventResult | undefined> {
