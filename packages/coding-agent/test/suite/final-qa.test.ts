@@ -67,6 +67,7 @@ function createMockUI(selections: (string | undefined)[], inputValue?: string) {
 		getEditorText: () => "",
 		editor: async () => undefined,
 		setEditorComponent: () => {},
+		getEditorComponent: () => undefined,
 		theme,
 		getAllThemes: () => [],
 		getTheme: () => undefined,

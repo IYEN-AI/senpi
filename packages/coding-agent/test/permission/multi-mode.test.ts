@@ -58,6 +58,7 @@ function createMockUI(overrides: Partial<ExtensionUIContext> = {}): ExtensionUIC
 		getToolsExpanded: vi.fn().mockReturnValue(false),
 		setToolsExpanded: vi.fn(),
 		...overrides,
+		getEditorComponent: overrides.getEditorComponent ?? vi.fn().mockReturnValue(undefined),
 	};
 }
 

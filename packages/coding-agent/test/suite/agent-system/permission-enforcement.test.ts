@@ -158,6 +158,7 @@ function createUiContext(selection: string | undefined): ExtensionUIContext {
 		getEditorText: () => "",
 		editor: async () => undefined,
 		setEditorComponent: () => {},
+		getEditorComponent: () => undefined,
 		theme,
 		getAllThemes: () => [],
 		getTheme: () => undefined,
