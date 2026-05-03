@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -18,6 +18,26 @@ describe("create-root-senpi-wrapper", () => {
 		// Then
 		assert.equal(shouldWriteGlobalShim(root), false);
 		assert.equal(result.globalShimWritten, false);
-		assert.equal(readFileSync(result.wrapperPath, "utf8").includes("packages/coding-agent/dist/cli.js"), true);
+		assert.equal(readFileSync(result.wrapperPath, "utf8").includes("packages/coding-agent/dist/senpi"), true);
+	});
+
+	it("replaces an existing global symlink instead of following it", () => {
+		// Given
+		const root = mkdtempSync(join(tmpdir(), "senpi-wrapper-root-"));
+		const globalPrefix = mkdtempSync(join(tmpdir(), "senpi-wrapper-global-"));
+		const globalBin = join(globalPrefix, "bin");
+		const linkedTarget = join(root, "linked-cli.js");
+		mkdirSync(join(root, ".git"));
+		mkdirSync(globalBin);
+		writeFileSync(linkedTarget, "original", "utf8");
+		symlinkSync(linkedTarget, join(globalBin, "senpi"));
+
+		// When
+		const result = createRootSenpiWrapper({ root, globalPrefix });
+
+		// Then
+		assert.equal(readFileSync(linkedTarget, "utf8"), "original");
+		assert.equal(lstatSync(result.globalShimPath).isSymbolicLink(), false);
+		assert.equal(readFileSync(result.globalShimPath, "utf8").includes(result.wrapperPath), true);
 	});
 });

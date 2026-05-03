@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { dirname } from "node:path";
@@ -23,7 +23,7 @@ export function createRootSenpiWrapper({
 	writeFileSync(
 		wrapperPath,
 		`#!/usr/bin/env node
-import "../packages/coding-agent/dist/cli.js";
+import "../packages/coding-agent/dist/senpi";
 `,
 		"utf8",
 	);
@@ -38,6 +38,9 @@ import "../packages/coding-agent/dist/cli.js";
 	const globalShimPath = join(globalBinDir, "senpi");
 
 	mkdirSync(globalBinDir, { recursive: true });
+	if (existsSync(globalShimPath)) {
+		rmSync(globalShimPath);
+	}
 	writeFileSync(
 		globalShimPath,
 		`#!/bin/sh
