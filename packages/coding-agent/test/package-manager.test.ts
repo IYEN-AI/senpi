@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONFIG_DIR_NAME } from "../src/config.js";
 import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
+import { shouldUseWindowsShell } from "../src/utils/child-process.js";
 
 function normalizeForMatch(value: string): string {
 	return value.replace(/\\/g, "/");
@@ -527,14 +528,11 @@ Content`,
 	describe("windows command spawning", () => {
 		it("should avoid the shell for git so Windows paths with spaces stay single arguments", () => {
 			vi.spyOn(process, "platform", "get").mockReturnValue("win32");
-			const managerWithInternals = packageManager as unknown as {
-				shouldUseWindowsShell(command: string): boolean;
-			};
 
-			expect(managerWithInternals.shouldUseWindowsShell("git")).toBe(false);
-			expect(managerWithInternals.shouldUseWindowsShell("npm")).toBe(true);
-			expect(managerWithInternals.shouldUseWindowsShell("pnpm")).toBe(true);
-			expect(managerWithInternals.shouldUseWindowsShell("C:/Program Files/nodejs/npm.cmd")).toBe(true);
+			expect(shouldUseWindowsShell("git")).toBe(false);
+			expect(shouldUseWindowsShell("npm")).toBe(true);
+			expect(shouldUseWindowsShell("pnpm")).toBe(true);
+			expect(shouldUseWindowsShell("C:/Program Files/nodejs/npm.cmd")).toBe(true);
 		});
 	});
 
