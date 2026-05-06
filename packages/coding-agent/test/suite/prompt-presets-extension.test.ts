@@ -42,18 +42,6 @@ describe("prompt preset resolver", () => {
 			api: "openai-responses" as const,
 			expectedName: "gpt-5.4" as const,
 		},
-		{
-			id: "gpt-5.5",
-			provider: "openai-codex",
-			api: "openai-codex-responses" as const,
-			expectedName: "gpt-5.5" as const,
-		},
-		{
-			id: "gpt-5.5-pro",
-			provider: "openai",
-			api: "openai-responses" as const,
-			expectedName: "gpt-5.5" as const,
-		},
 	])("returns $expectedName preset for $provider/$id", ({ id, provider, api, expectedName }) => {
 		// given
 		const settings: PromptPresetSettings = { promptPreset: "auto" };
@@ -69,6 +57,42 @@ describe("prompt preset resolver", () => {
 		expect(preset?.prompt).toContain("outcome-first");
 		expect(preset?.prompt).toContain("## Intent Gate");
 		expect(preset?.prompt).toContain("I read this as");
+		expect(preset?.prompt.length).toBeGreaterThan(2_000);
+	});
+
+	it.each([
+		{
+			id: "gpt-5.5",
+			provider: "openai-codex",
+			api: "openai-codex-responses" as const,
+		},
+		{
+			id: "gpt-5.5-pro",
+			provider: "openai",
+			api: "openai-responses" as const,
+		},
+	])("returns gpt-5.5 preset for $provider/$id", ({ id, provider, api }) => {
+		// given
+		const settings: PromptPresetSettings = { promptPreset: "auto" };
+		const model = createModel(id, provider, api);
+
+		// when
+		const preset = resolvePreset(model, settings);
+
+		// then
+		expect(preset?.name).toBe("gpt-5.5");
+		expect(preset?.prompt).toContain("You are senpi");
+		expect(preset?.prompt).toContain("## Operator Notes");
+		expect(preset?.prompt).toContain("outcome-first");
+		expect(preset?.prompt).toContain("Preamble");
+		expect(preset?.prompt).toContain("Todo discipline");
+		expect(preset?.prompt).toContain("todowrite");
+		expect(preset?.prompt).toContain("Dig deeper");
+		expect(preset?.prompt).toContain("decision rules");
+		expect(preset?.prompt).toContain("## Intent Gate");
+		expect(preset?.prompt).toContain("I read this as");
+		expect(preset?.prompt).not.toContain("GPT-5.5");
+		expect(preset?.prompt).not.toContain("gpt-5.5");
 		expect(preset?.prompt.length).toBeGreaterThan(2_000);
 	});
 
@@ -225,6 +249,9 @@ describe("prompt preset resolver", () => {
 
 		// then
 		expect(preset?.name).toBe("gpt-5.5");
-		expect(preset?.prompt).toContain("## Model Notes (GPT-5)");
+		expect(preset?.prompt).toContain("## Operator Notes");
+		expect(preset?.prompt).toContain("Todo discipline");
+		expect(preset?.prompt).toContain("Dig deeper");
+		expect(preset?.prompt).not.toContain("GPT-5.5");
 	});
 });

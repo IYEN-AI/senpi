@@ -1,6 +1,7 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.js";
 import { buildClaudeOpusPrompt } from "./claude-opus.js";
+import { buildGpt55Prompt } from "./gpt-5.5.js";
 import { buildGpt5Prompt } from "./gpt-5.js";
 import { buildKimiK26Prompt } from "./kimi-k2-6.js";
 import type { PromptPresetName, PromptPresetSettings } from "./settings.js";
@@ -68,7 +69,10 @@ export function resolvePresetName(
 }
 
 function buildPreset(name: ResolvedPresetName, options: BuildDynamicSystemPromptOptions): ResolvedPromptPreset {
-	if (name === "gpt-5" || name === "gpt-5.4" || name === "gpt-5.5") {
+	if (name === "gpt-5.5") {
+		return { name, prompt: buildGpt55Prompt(options) };
+	}
+	if (name === "gpt-5" || name === "gpt-5.4") {
 		return { name, prompt: buildGpt5Prompt(options) };
 	}
 	if (name === "kimi-k2-6") {
