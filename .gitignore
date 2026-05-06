@@ -29,6 +29,7 @@ packages/*/dist-firefox/
 .vscode/
 .zed/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
