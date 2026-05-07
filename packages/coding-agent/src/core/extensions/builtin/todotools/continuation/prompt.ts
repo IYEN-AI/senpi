@@ -1,8 +1,4 @@
-import { sanitizeTodoText, type TodoItem } from "../state.js";
-
-function isIncompleteTodo(todo: TodoItem): boolean {
-	return todo.status !== "completed" && todo.status !== "cancelled";
-}
+import { isIncompleteTodo, sanitizeTodoText, type TodoItem } from "../state.js";
 
 export const CONTINUATION_DIRECTIVE = `[SYSTEM DIRECTIVE: SANEPI - TODO CONTINUATION]
 

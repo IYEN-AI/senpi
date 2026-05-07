@@ -183,6 +183,7 @@ describe("todowrite extension", () => {
 		const todos = [
 			{ content: "Active task", status: "in_progress", priority: "high" },
 			{ content: "Done task", status: "completed", priority: "low" },
+			{ content: "Cancelled task", status: "cancelled", priority: "low" },
 			{ content: "Queued task", status: "pending", priority: "medium" },
 		];
 
@@ -190,8 +191,30 @@ describe("todowrite extension", () => {
 		const lines = getTodoWidgetLines(todos);
 
 		// then
-		expect(lines).toEqual(["Todo", "[•] Active task", "[✓] Done task", "[ ] Queued task"]);
-		expect(getTodoResultLines(todos)).toEqual(["2 todos", "[•] Active task", "[✓] Done task", "[ ] Queued task"]);
+		expect(lines).toEqual(["Todo", "[•] Active task", "[✓] Done task", "[×] Cancelled task", "[ ] Queued task"]);
+		expect(getTodoResultLines(todos)).toEqual([
+			"2 todos",
+			"[•] Active task",
+			"[✓] Done task",
+			"[×] Cancelled task",
+			"[ ] Queued task",
+		]);
+	});
+
+	it("treats cancelled todos as terminal in widget visibility and result counts", async () => {
+		// given
+		const { getTodoResultLines, getTodoWidgetLines } = await loadTodoExtensionModule();
+		const todos = [
+			{ content: "Done task", status: "completed", priority: "low" },
+			{ content: "Cancelled task", status: "cancelled", priority: "low" },
+		];
+
+		// when
+		const lines = getTodoWidgetLines(todos);
+
+		// then
+		expect(lines).toBeUndefined();
+		expect(getTodoResultLines(todos)).toEqual(["0 todos", "[✓] Done task", "[×] Cancelled task"]);
 	});
 
 	it("sanitizes todo widget output before rendering", async () => {

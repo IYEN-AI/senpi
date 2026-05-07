@@ -18,8 +18,16 @@ type BranchEntry = { type: string; customType?: string; data?: unknown; message?
 
 export const TODO_STATE_ENTRY_TYPE = "sanepi.todo-state";
 
+export function isTerminalTodoStatus(status: string): boolean {
+	return status === "completed" || status === "cancelled";
+}
+
+export function isIncompleteTodo(todo: TodoItem): boolean {
+	return !isTerminalTodoStatus(todo.status);
+}
+
 function countOpenTodos(todos: TodoItem[]): number {
-	return todos.filter((todo) => todo.status !== "completed").length;
+	return todos.filter(isIncompleteTodo).length;
 }
 
 export function sanitizeTodoText(text: string): string {
@@ -33,11 +41,12 @@ export function sanitizeTodoText(text: string): string {
 export function getTodoMarker(status: string): string {
 	if (status === "completed") return "[✓]";
 	if (status === "in_progress") return "[•]";
+	if (status === "cancelled") return "[×]";
 	return "[ ]";
 }
 
 export function getTodoWidgetLines(todos: TodoItem[]): string[] | undefined {
-	if (todos.length === 0 || !todos.some((todo) => todo.status !== "completed")) {
+	if (todos.length === 0 || !todos.some(isIncompleteTodo)) {
 		return undefined;
 	}
 	return ["Todo", ...todos.map((todo) => `${getTodoMarker(todo.status)} ${sanitizeTodoText(todo.content)}`)];
