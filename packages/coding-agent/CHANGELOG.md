@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added builtin `tool-pair-guard` extension to sanitize Anthropic request payloads by removing orphan `tool_result` blocks before provider calls.
+
 ### Fixed
 
 - Fixed `pi -p` treating prompts that start with YAML frontmatter as extension flags instead of user messages ([#4163](https://github.com/badlogic/pi-mono/issues/4163)).

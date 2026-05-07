@@ -10,6 +10,7 @@ import promptPresetExtension from "./prompt-preset/index.js";
 import redrawsExtension from "./redraws.js";
 import serviceTierExtension from "./service-tier.js";
 import todowriteExtension from "./todotools/index.js";
+import toolPairGuardExtension from "./tool-pair-guard/index.js";
 import webfetchExtension from "./webfetch/index.js";
 
 export interface BuiltinExtensionFactory {
@@ -31,5 +32,6 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "service-tier", factory: serviceTierExtension },
 	{ id: "bash-timeout", factory: bashTimeoutExtension },
 	{ id: "webfetch", factory: webfetchExtension },
+	{ id: "tool-pair-guard", factory: toolPairGuardExtension },
 	{ id: "compaction", factory: compactionExtension },
 ];
