@@ -15,6 +15,11 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-google-google-search"
 		},
+		"google-code-execution": {
+			"packageName": "pi-google-code-execution",
+			"version": "0.1.0",
+			"source": "../pi-extensions/pi-google-code-execution"
+		},
 		"webfetch": {
 			"packageName": "pi-webfetch",
 			"version": "0.1.0",
