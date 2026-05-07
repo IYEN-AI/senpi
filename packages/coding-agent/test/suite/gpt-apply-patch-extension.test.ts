@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import stripAnsi from "strip-ansi";
 import { afterEach, describe, expect, it } from "vitest";
 import { convertResponsesTools } from "../../../ai/src/providers/openai-responses-shared.js";
 import gptApplyPatchExtension, {
@@ -9,9 +10,13 @@ import gptApplyPatchExtension, {
 	isOpenAIGptModel,
 } from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
 import { createBuiltinParserRegistry } from "../../src/core/extensions/builtin/permission-system/parsers.js";
-import type { ToolDefinition } from "../../src/core/extensions/index.js";
+import type { ToolDefinition, ToolRenderContext } from "../../src/core/extensions/types.js";
+import { initTheme, theme } from "../../src/modes/interactive/theme/theme.js";
 import type { Harness } from "./harness.js";
 import { createHarness } from "./harness.js";
+
+type ApplyPatchTool = ReturnType<typeof createApplyPatchTool>;
+type ApplyPatchUpdate = Parameters<NonNullable<Parameters<ApplyPatchTool["execute"]>[3]>>[0];
 
 describe("gpt-apply-patch builtin extension", () => {
 	const harnesses: Harness[] = [];
@@ -161,6 +166,77 @@ describe("gpt-apply-patch builtin extension", () => {
 		);
 
 		expect(await readFile(targetPath, "utf-8")).toBe("after\n");
+	});
+
+	it("renders a pending apply_patch update as a Codex-style TUI diff widget", async () => {
+		initTheme("dark");
+		const harness = await createHarness();
+		harnesses.push(harness);
+		await writeFile(path.join(harness.tempDir, "sample.txt"), "before\n", "utf-8");
+		const patch = `*** Begin Patch
+*** Update File: sample.txt
+@@
+-before
++after
+*** Add File: created.txt
++created
+*** End Patch`;
+		const tool = createApplyPatchTool();
+		let pendingUpdate: ApplyPatchUpdate | undefined;
+
+		await tool.execute(
+			"call-preview",
+			{ input: patch },
+			undefined,
+			(update) => {
+				pendingUpdate = update;
+			},
+			{ cwd: harness.tempDir } as Parameters<typeof tool.execute>[4],
+		);
+
+		if (!pendingUpdate) {
+			throw new Error("apply_patch did not emit a pending update");
+		}
+
+		const firstText = pendingUpdate.content.find((block) => block.type === "text")?.text ?? "";
+		expect(firstText).toContain("Applying patch...\n• Edited 2 files (+2 -1)");
+		expect(firstText).toContain("sample.txt (+1 -1)");
+		expect(firstText).toContain("-1 before");
+		expect(firstText).toContain("+1 after");
+		expect(firstText).toContain("created.txt (+1 -0)");
+		expect(firstText).toContain("+1 created");
+		expect(firstText).not.toContain("Index:");
+
+		const renderContext = {
+			args: { input: patch },
+			toolCallId: "call-preview",
+			invalidate: () => {},
+			lastComponent: undefined,
+			state: {},
+			cwd: harness.tempDir,
+			executionStarted: true,
+			argsComplete: true,
+			isPartial: true,
+			expanded: false,
+			showImages: true,
+			isError: false,
+		} satisfies ToolRenderContext<Record<string, never>, { input: string }>;
+
+		const callComponent = tool.renderCall?.({ input: patch }, theme, renderContext);
+		const component = tool.renderResult?.(
+			{ content: pendingUpdate.content, details: pendingUpdate.details },
+			{ expanded: false, isPartial: true },
+			theme,
+			renderContext,
+		);
+		const renderedCall = stripAnsi(callComponent?.render(120).join("\n") ?? "");
+		const rendered = stripAnsi(component?.render(120).join("\n") ?? "");
+		expect(renderedCall).toContain("apply_patch");
+		expect(rendered).toContain("Applying patch");
+		expect(rendered).toContain("• Edited 2 files (+2 -1)");
+		expect(rendered).toContain("sample.txt (+1 -1)");
+		expect(rendered).toContain("+1 after");
+		expect(rendered).not.toContain("Index:");
 	});
 
 	it("rejects absolute and parent-escaping paths", async () => {
