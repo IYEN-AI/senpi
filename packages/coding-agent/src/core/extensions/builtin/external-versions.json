@@ -60,6 +60,11 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-anthropic-bash"
 		},
+		"anthropic-text-editor": {
+			"packageName": "pi-anthropic-text-editor",
+			"version": "0.1.0",
+			"source": "../pi-extensions/pi-anthropic-text-editor"
+		},
 		"openai-web-search": {
 			"packageName": "pi-openai-web-search",
 			"version": "0.1.0",
