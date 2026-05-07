@@ -432,6 +432,48 @@
       padding-top: 0;
     }
 
+    .provider-native-block {
+      margin: var(--line-height);
+      color: var(--muted);
+    }
+
+    .message-timestamp + .provider-native-block {
+      margin-top: 0;
+    }
+
+    .provider-native-block summary {
+      cursor: pointer;
+      color: var(--muted);
+      list-style: none;
+    }
+
+    .provider-native-block summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .provider-native-body {
+      margin: 8px 0 0 0;
+      padding: 8px;
+      border: 1px solid var(--dim);
+      border-radius: 4px;
+      background: var(--toolPendingBg);
+      color: var(--text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .provider-native-full {
+      display: none;
+    }
+
+    .provider-native-block[open] .provider-native-collapsed {
+      display: none;
+    }
+
+    .provider-native-block[open] .provider-native-full {
+      display: block;
+    }
+
     .thinking-text {
       padding: var(--line-height);
       color: var(--thinkingText);

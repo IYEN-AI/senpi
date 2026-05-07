@@ -5,6 +5,7 @@
 ### Added
 
 - Added builtin `tool-pair-guard` extension to sanitize Anthropic request payloads by removing orphan `tool_result` blocks before provider calls.
+- Added core fallback rendering for assistant `providerNative` content blocks across interactive surfaces and HTML export, including expandable summaries and truncated JSON previews so provider-native server outputs are visible.
 
 ### Fixed
 

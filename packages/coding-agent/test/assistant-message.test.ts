@@ -54,4 +54,32 @@ describe("AssistantMessageComponent", () => {
 		expect(rendered.includes(OSC133_ZONE_END)).toBe(false);
 		expect(rendered.includes(OSC133_ZONE_FINAL)).toBe(false);
 	});
+
+	test("renders providerNative content with collapsed and expanded states", () => {
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([
+				{
+					type: "providerNative",
+					subtype: "web_search",
+					raw: {
+						items: Array.from({ length: 60 }, (_, index) => ({
+							id: index,
+							title: `Result ${index}`,
+						})),
+					},
+				},
+			]),
+		);
+
+		const collapsed = component.render(120).join("\n");
+		expect(collapsed).toContain("▸ openai · providerNative · web_search");
+		expect(collapsed).toContain("…");
+
+		component.setExpanded(true);
+		const expanded = component.render(120).join("\n");
+		expect(expanded).toContain("▾ openai · providerNative · web_search");
+		expect(expanded).toContain('"title": "Result 59"');
+	});
 });

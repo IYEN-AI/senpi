@@ -861,6 +861,27 @@
         return out;
       }
 
+      function stringifyProviderNativeRaw(raw) {
+        try {
+          return JSON.stringify(raw, null, 2) ?? 'null';
+        } catch {
+          return String(raw);
+        }
+      }
+
+      function renderProviderNativeBlock(message, block) {
+        const providerPrefix = message.provider ? `${escapeHtml(message.provider)} · ` : '';
+        const subtype = escapeHtml(block.subtype || 'unknown');
+        const rawBody = stringifyProviderNativeRaw(block.raw);
+        const collapsedBody = rawBody.length > 2000 ? `${rawBody.slice(0, 2000)}…` : rawBody;
+
+        return `<details class="provider-native-block">
+          <summary>${providerPrefix}providerNative · ${subtype}</summary>
+          <pre class="provider-native-body provider-native-collapsed">${escapeHtml(collapsedBody)}</pre>
+          <pre class="provider-native-body provider-native-full">${escapeHtml(rawBody)}</pre>
+        </details>`;
+      }
+
       function renderToolCall(call) {
         const result = findToolResult(call.id);
         const isError = result?.isError || false;
@@ -1174,6 +1195,8 @@
                   <div class="thinking-text">${escapeHtml(block.thinking)}</div>
                   <div class="thinking-collapsed">Thinking ...</div>
                 </div>`;
+              } else if (block.type === 'providerNative') {
+                html += renderProviderNativeBlock(msg, block);
               }
             }
 

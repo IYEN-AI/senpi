@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ProviderNativeContent } from "@mariozechner/pi-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@mariozechner/pi-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 
@@ -20,6 +20,7 @@ export class AssistantMessageComponent extends Container {
 	private lastMessage?: AssistantMessage;
 	private lastMessageSignature?: string;
 	private hasToolCalls = false;
+	private expanded = false;
 
 	constructor(
 		message?: AssistantMessage,
@@ -69,6 +70,17 @@ export class AssistantMessageComponent extends Container {
 		}
 	}
 
+	setExpanded(expanded: boolean): void {
+		if (this.expanded === expanded) {
+			return;
+		}
+		this.expanded = expanded;
+		if (this.lastMessage) {
+			this.lastMessageSignature = undefined;
+			this.updateContent(this.lastMessage);
+		}
+	}
+
 	override render(width: number): string[] {
 		const signature = this.lastMessageSignature ?? "";
 		if (this.cachedLines && this.cachedWidth === width && this.cachedSignature === signature) {
@@ -100,7 +112,10 @@ export class AssistantMessageComponent extends Container {
 		this.contentContainer.clear();
 
 		const hasVisibleContent = message.content.some(
-			(c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()),
+			(c) =>
+				(c.type === "text" && c.text.trim()) ||
+				(c.type === "thinking" && c.thinking.trim()) ||
+				c.type === "providerNative",
 		);
 
 		if (hasVisibleContent) {
@@ -140,6 +155,24 @@ export class AssistantMessageComponent extends Container {
 					if (hasVisibleContentAfter) {
 						this.contentContainer.addChild(new Spacer(1));
 					}
+				}
+			} else if (content.type === "providerNative") {
+				this.contentContainer.addChild(
+					new Text(theme.fg("muted", this.formatProviderNativeSummary(message, content)), 1, 0),
+				);
+				this.contentContainer.addChild(
+					new Text(theme.fg("dim", this.formatProviderNativeBody(content, this.expanded)), 3, 0),
+				);
+				const hasVisibleContentAfter = message.content
+					.slice(i + 1)
+					.some(
+						(c) =>
+							(c.type === "text" && c.text.trim()) ||
+							(c.type === "thinking" && c.thinking.trim()) ||
+							c.type === "providerNative",
+					);
+				if (hasVisibleContentAfter) {
+					this.contentContainer.addChild(new Spacer(1));
 				}
 			}
 		}
@@ -188,5 +221,27 @@ export class AssistantMessageComponent extends Container {
 		this.cachedLines = undefined;
 		this.cachedSignature = undefined;
 		this.cachedWidth = undefined;
+	}
+
+	private formatProviderNativeSummary(message: AssistantMessage, content: ProviderNativeContent): string {
+		const provider = message.provider ? `${message.provider} · ` : "";
+		const marker = this.expanded ? "▾" : "▸";
+		return `${marker} ${provider}providerNative · ${content.subtype}`;
+	}
+
+	private formatProviderNativeBody(content: ProviderNativeContent, expanded: boolean): string {
+		const rawJson = this.stringifyProviderNative(content.raw);
+		if (expanded || rawJson.length <= 2000) {
+			return rawJson;
+		}
+		return `${rawJson.slice(0, 2000)}…`;
+	}
+
+	private stringifyProviderNative(raw: unknown): string {
+		try {
+			return JSON.stringify(raw, null, 2) ?? "null";
+		} catch {
+			return String(raw);
+		}
 	}
 }

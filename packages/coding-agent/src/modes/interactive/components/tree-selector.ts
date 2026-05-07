@@ -819,6 +819,11 @@ class TreeList implements Component {
 					result += (c as { text: string }).text;
 					if (result.length >= maxLen) return result.slice(0, maxLen);
 				}
+				if (typeof c === "object" && c !== null && "type" in c && c.type === "providerNative") {
+					const subtype = (c as { subtype?: string }).subtype ?? "unknown";
+					result += `[providerNative:${subtype}]`;
+					if (result.length >= maxLen) return result.slice(0, maxLen);
+				}
 			}
 			return result;
 		}
@@ -832,6 +837,9 @@ class TreeList implements Component {
 				if (typeof c === "object" && c !== null && "type" in c && c.type === "text") {
 					const text = (c as { text?: string }).text;
 					if (text && text.trim().length > 0) return true;
+				}
+				if (typeof c === "object" && c !== null && "type" in c && c.type === "providerNative") {
+					return true;
 				}
 			}
 		}
