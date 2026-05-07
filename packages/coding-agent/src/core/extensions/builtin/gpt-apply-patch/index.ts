@@ -1,6 +1,7 @@
 import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Model } from "@mariozechner/pi-ai";
+import { createTwoFilesPatch } from "diff";
 import { Type } from "typebox";
 import type { AgentToolResult } from "../../types.js";
 import { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";
@@ -163,12 +164,67 @@ export function extractPatchedPaths(patchText: string): string[] {
 	return Array.from(matches, (match) => match[1] ?? "");
 }
 
-function formatPendingPatchUpdate(patchText: string): string {
-	const paths = extractPatchedPaths(patchText);
-	if (paths.length === 0) {
-		return "Applying patch...";
+function trimDiff(diff: string): string {
+	const lines = diff.split("\n");
+	const contentLines = lines.filter(
+		(line) =>
+			(line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+			!line.startsWith("---") &&
+			!line.startsWith("+++"),
+	);
+	if (contentLines.length === 0) {
+		return diff;
 	}
-	return `Applying patch...\n${paths.map((filePath) => `• ${filePath}`).join("\n")}`;
+
+	let minIndent = Number.POSITIVE_INFINITY;
+	for (const line of contentLines) {
+		const content = line.slice(1);
+		if (content.trim().length > 0) {
+			minIndent = Math.min(minIndent, content.match(/^(\s*)/)?.[1]?.length ?? 0);
+		}
+	}
+	if (minIndent === Number.POSITIVE_INFINITY || minIndent === 0) {
+		return diff;
+	}
+
+	return lines
+		.map((line) => {
+			if (
+				(line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) &&
+				!line.startsWith("---") &&
+				!line.startsWith("+++")
+			) {
+				return `${line[0] ?? ""}${line.slice(1 + minIndent)}`;
+			}
+			return line;
+		})
+		.join("\n");
+}
+
+function createPatchDiff(oldPath: string, newPath: string, oldContent: string, newContent: string): string {
+	return trimDiff(createTwoFilesPatch(oldPath, newPath, oldContent, newContent).trimEnd());
+}
+
+async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Promise<string> {
+	const diffs: string[] = [];
+	for (const hunk of hunks) {
+		const absolutePath = await resolveWorkspacePath(cwd, hunk.filePath);
+		if (hunk.type === "add") {
+			diffs.push(createPatchDiff(hunk.filePath, hunk.filePath, "", hunk.content));
+			continue;
+		}
+
+		if (hunk.type === "delete") {
+			const oldContent = await readFile(absolutePath, "utf-8");
+			diffs.push(createPatchDiff(hunk.filePath, hunk.filePath, oldContent, ""));
+			continue;
+		}
+
+		const oldContent = await readFile(absolutePath, "utf-8");
+		const newContent = hunk.chunks.length === 0 ? oldContent : replaceChunks(oldContent, hunk.filePath, hunk.chunks);
+		diffs.push(createPatchDiff(hunk.filePath, hunk.movePath ?? hunk.filePath, oldContent, newContent));
+	}
+	return diffs.filter((diff) => diff.trim().length > 0).join("\n");
 }
 
 function parsePatch(patchText: string): ParsedPatch[] {
@@ -435,6 +491,24 @@ export async function applyPatch(cwd: string, patchText: string): Promise<string
 	return applyParsedPatch(cwd, hunks);
 }
 
+async function createPendingPatchUpdate(cwd: string, patchText: string): Promise<string> {
+	const hunks = parsePatch(patchText);
+	if (hunks.length === 0) {
+		return "Applying patch...";
+	}
+
+	const diff = await createPatchPreview(cwd, hunks);
+	if (diff.trim().length > 0) {
+		return `Applying patch...\n${diff}`;
+	}
+
+	const paths = extractPatchedPaths(patchText);
+	if (paths.length === 0) {
+		return "Applying patch...";
+	}
+	return `Applying patch...\n${paths.map((filePath) => `• ${filePath}`).join("\n")}`;
+}
+
 function hasEditTools(toolNames: string[]): boolean {
 	return toolNames.some((toolName) => EDIT_TOOL_NAMES.has(toolName));
 }
@@ -541,7 +615,7 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 			}
 
 			onUpdate?.({
-				content: [{ type: "text", text: formatPendingPatchUpdate(normalizedParams.input) }],
+				content: [{ type: "text", text: await createPendingPatchUpdate(ctx.cwd, normalizedParams.input) }],
 				details: undefined,
 			});
 
