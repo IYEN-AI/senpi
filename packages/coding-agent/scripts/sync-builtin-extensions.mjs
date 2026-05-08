@@ -31,59 +31,6 @@ const FILES = [
 	},
 	{ source: "pi-bash-timeout/src/timeout.ts", target: "bash-timeout/timeout.ts" },
 	{
-		source: "pi-webfetch/src/index.ts",
-		target: "webfetch/index.ts",
-		transform: (content) =>
-			content
-				.replace(
-					'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";',
-					'import type { ExtensionAPI } from "../../types.js";',
-				)
-				.replace(
-					'import { renderWebfetchCall, renderWebfetchResult } from "./webfetch/renderers.js";',
-					'import { renderWebfetchCall, renderWebfetchResult } from "./renderers.js";',
-				)
-				.replace(
-					'import { type WebfetchDetails, webfetch } from "./webfetch/tool.js";',
-					'import { type WebfetchDetails, webfetch } from "./tool.js";',
-				),
-	},
-	{ source: "pi-webfetch/src/webfetch/content.ts", target: "webfetch/content.ts" },
-	{
-		source: "pi-webfetch/src/webfetch/fetcher.ts",
-		target: "webfetch/fetcher.ts",
-		transform: (content) => content.replace(": HeadersInit", ": Record<string, string>"),
-	},
-	{
-		source: "pi-webfetch/src/webfetch/tool.ts",
-		target: "webfetch/tool.ts",
-		transform: (content) =>
-			content
-				.replace(
-					'import { defineTool } from "@mariozechner/pi-coding-agent";',
-					'import { defineTool } from "../../types.js";',
-				)
-				.replace(
-					'import { StringEnum } from "@mariozechner/pi-ai";\nimport { defineTool } from "../../types.js";\nimport { Type } from "typebox";',
-					'import { StringEnum } from "@mariozechner/pi-ai";\nimport { Type } from "typebox";\nimport { defineTool } from "../../types.js";',
-				),
-	},
-	{
-		source: "pi-webfetch/src/webfetch/renderers.ts",
-		target: "webfetch/renderers.ts",
-		transform: (content) =>
-			content
-				.replace(
-					'import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";',
-					'import type { ToolRenderResultOptions } from "../../types.js";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";',
-				)
-				.replace(
-					'import type { ToolRenderResultOptions } from "../../types.js";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";\nimport { Text, truncateToWidth } from "@mariozechner/pi-tui";',
-					'import { Text, truncateToWidth } from "@mariozechner/pi-tui";\nimport type { theme as ThemeInstance } from "../../../../modes/interactive/theme/theme.js";\nimport type { ToolRenderResultOptions } from "../../types.js";',
-				)
-				.replaceAll(": Theme", ": typeof ThemeInstance"),
-	},
-	{
 		source: "pi-apply-patch/src/index.ts",
 		target: "gpt-apply-patch/index.ts",
 		transform: (content) =>
@@ -106,7 +53,6 @@ const FILES = [
 const PACKAGES = [
 	{ id: "openai-api-parallel-tool-calls", packageDir: "pi-openai-api-parallel-tool-calls" },
 	{ id: "bash-timeout", packageDir: "pi-bash-timeout" },
-	{ id: "webfetch", packageDir: "pi-webfetch" },
 	{ id: "gpt-apply-patch", packageDir: "pi-apply-patch" },
 ];
 

@@ -597,8 +597,8 @@ describe("InteractiveMode.showLoadedResources", () => {
 	test("mixed single-file and subdirectory index.ts extensions strip index.ts", () => {
 		const extensions: ExtensionFixture[] = [
 			{
-				path: "/tmp/extensions/webfetch.ts",
-				sourceInfo: createSourceInfo("/tmp/extensions/webfetch.ts", {
+				path: "/tmp/extensions/single-file-extension.ts",
+				sourceInfo: createSourceInfo("/tmp/extensions/single-file-extension.ts", {
 					source: "local",
 					scope: "project",
 					origin: "top-level",
@@ -628,7 +628,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.chatContainer)).toMatchInlineSnapshot(`
 "[Extensions]
-  plan-mode, webfetch.ts"`);
+  plan-mode, single-file-extension.ts"`);
 	});
 
 	test("multiple index.ts with unique parent dirs need no disambiguation", () => {

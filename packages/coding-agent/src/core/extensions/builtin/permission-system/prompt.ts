@@ -58,9 +58,6 @@ function formatRequestForDisplay(request: Request): string {
 			parts.push(`Type: ${meta.subagent_type || "Unknown"}`);
 			if (meta.description) parts.push(`Description: ${meta.description}`);
 			break;
-		case "webfetch":
-			parts.push(`URL: ${meta.url || "Unknown"}`);
-			break;
 		case "websearch":
 		case "codesearch":
 			parts.push(`Query: ${meta.query || "Unknown"}`);

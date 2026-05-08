@@ -19,7 +19,5 @@ describe("synced builtin extensions", () => {
 		expect(manifest.extensions?.["openai-api-parallel-tool-calls"]?.version).toBe("0.1.0");
 		expect(manifest.extensions?.["bash-timeout"]?.packageName).toBe("pi-bash-timeout");
 		expect(manifest.extensions?.["bash-timeout"]?.version).toBe("0.1.0");
-		expect(manifest.extensions?.webfetch?.packageName).toBe("pi-webfetch");
-		expect(manifest.extensions?.webfetch?.version).toBe("0.1.0");
 	});
 });

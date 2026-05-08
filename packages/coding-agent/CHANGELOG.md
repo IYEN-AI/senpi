@@ -11,6 +11,10 @@
 - Added builtin `anthropic-tool-search` extension that opt-in injects Anthropic native `tool_search_tool_regex_20251119` and/or `tool_search_tool_bm25_20251119` tools for `anthropic-messages` requests when `PI_ANTHROPIC_TOOL_SEARCH` is set to `regex`, `bm25`, or `both`.
 - Added builtin `openai-web-search` extension that injects OpenAI Responses native `web_search` for `openai-responses`/`azure-openai-responses` requests and strips duplicate function-style `web_search` tool entries so the native tool is used.
 
+### Removed
+
+- Removed the `webfetch` builtin extension. Anthropic and Google users should rely on the native `anthropic-web-fetch` and `google-url-context` builtins respectively. OpenAI users lose function-tool web_fetch fallback.
+
 ### Fixed
 
 - Fixed `pi -p` treating prompts that start with YAML frontmatter as extension flags instead of user messages ([#4163](https://github.com/badlogic/pi-mono/issues/4163)).

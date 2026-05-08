@@ -631,16 +631,16 @@ describe("Permission System - Ported from opencode", () => {
 
 		it("disables multiple tools", () => {
 			const result = disabled(
-				["bash", "edit", "webfetch"],
+				["bash", "edit", "read"],
 				[
 					{ permission: "bash", pattern: "*", action: "deny" },
 					{ permission: "edit", pattern: "*", action: "deny" },
-					{ permission: "webfetch", pattern: "*", action: "deny" },
+					{ permission: "read", pattern: "*", action: "deny" },
 				],
 			);
 			expect(result.has("bash")).toBe(true);
 			expect(result.has("edit")).toBe(true);
-			expect(result.has("webfetch")).toBe(true);
+			expect(result.has("read")).toBe(true);
 		});
 
 		it("wildcard permission denies all tools", () => {

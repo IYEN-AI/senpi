@@ -362,7 +362,6 @@ Content`,
 				"<builtin:openai-api-parallel-tool-calls>",
 				"<builtin:service-tier>",
 				"<builtin:bash-timeout>",
-				"<builtin:webfetch>",
 				"<builtin:compaction>",
 			]);
 		});
@@ -372,7 +371,7 @@ Content`,
 			mkdirSync(projectConfigDir, { recursive: true });
 			writeFileSync(
 				join(projectConfigDir, "settings.json"),
-				JSON.stringify({ enabledBuiltinExtensions: ["bash-timeout", "webfetch"] }, null, 2),
+				JSON.stringify({ enabledBuiltinExtensions: ["bash-timeout", "compaction"] }, null, 2),
 			);
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 
@@ -381,13 +380,13 @@ Content`,
 			const builtinPaths = loader.getExtensions().extensions.map((extension) => extension.path);
 
 			// then
-			expect(builtinPaths).toEqual(["<builtin:bash-timeout>", "<builtin:webfetch>"]);
+			expect(builtinPaths).toEqual(["<builtin:bash-timeout>", "<builtin:compaction>"]);
 		});
 
 		it("should let disabled builtin extensions override the builtin allowlist", async () => {
 			// given
 			const settingsManager = SettingsManager.inMemory({
-				enabledBuiltinExtensions: ["bash-timeout", "webfetch"],
+				enabledBuiltinExtensions: ["bash-timeout", "compaction"],
 				disabledBuiltinExtensions: ["bash-timeout"],
 			});
 			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
@@ -397,7 +396,7 @@ Content`,
 			const builtinPaths = loader.getExtensions().extensions.map((extension) => extension.path);
 
 			// then
-			expect(builtinPaths).toEqual(["<builtin:webfetch>"]);
+			expect(builtinPaths).toEqual(["<builtin:compaction>"]);
 		});
 
 		it("should allow settings to disable selected builtin extensions", async () => {
