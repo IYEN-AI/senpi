@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { estimateTokens } from "../../../compaction/index.js";
 import type { BeforeAgentStartEventResult, CompactionReason } from "../../types.js";
 import { extractPatchedPaths } from "../gpt-apply-patch/index.js";

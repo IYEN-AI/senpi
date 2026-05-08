@@ -1,5 +1,5 @@
 import { access, lstat, readdir, readFile, writeFile } from "node:fs/promises";
-import type { Api, TextContent } from "@mariozechner/pi-ai";
+import type { Api, TextContent } from "@earendil-works/pi-ai";
 import { type Static, Type } from "typebox";
 import type { AgentToolResult, ExtensionAPI } from "../../types.js";
 

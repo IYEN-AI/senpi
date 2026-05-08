@@ -1,5 +1,5 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { repairOrphanedToolResults } from "@mariozechner/pi-ai";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { repairOrphanedToolResults } from "@earendil-works/pi-ai";
 import { type CompactionResult, DEFAULT_COMPACTION_SETTINGS } from "../../../compaction/index.js";
 import { convertToLlm } from "../../../messages.js";
 import type { CompactionEntry } from "../../../session-manager.js";

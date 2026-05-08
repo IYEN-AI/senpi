@@ -3,7 +3,7 @@
  */
 
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
-import { matchesKey, visibleWidth } from "@mariozechner/pi-tui";
+import { matchesKey, visibleWidth } from "@earendil-works/pi-tui";
 
 const GAME_WIDTH = 40;
 const GAME_HEIGHT = 15;

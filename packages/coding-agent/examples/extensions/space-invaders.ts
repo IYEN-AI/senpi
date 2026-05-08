@@ -4,7 +4,7 @@
  */
 
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
-import { isKeyRelease, Key, matchesKey, visibleWidth } from "@mariozechner/pi-tui";
+import { isKeyRelease, Key, matchesKey, visibleWidth } from "@earendil-works/pi-tui";
 
 const GAME_WIDTH = 60;
 const GAME_HEIGHT = 24;

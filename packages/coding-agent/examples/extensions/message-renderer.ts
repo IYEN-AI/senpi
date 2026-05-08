@@ -8,7 +8,7 @@
  */
 
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
-import { Box, Text } from "@mariozechner/pi-tui";
+import { Box, Text } from "@earendil-works/pi-tui";
 
 export default function (pi: ExtensionAPI) {
 	// Register custom renderer for "status-update" messages

@@ -16,7 +16,7 @@ const FILES = [
 		target: "openai-api-parallel-tool-calls/index.ts",
 		transform: (content) =>
 			content.replace(
-				'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";',
+				'import type { ExtensionAPI } from "@code-yeongyu/senpi";',
 				'import type { ExtensionAPI } from "../../types.js";',
 			),
 	},
@@ -25,7 +25,7 @@ const FILES = [
 		target: "bash-timeout/index.ts",
 		transform: (content) =>
 			content.replace(
-				'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";',
+				'import type { ExtensionAPI } from "@code-yeongyu/senpi";',
 				'import type { ExtensionAPI } from "../../types.js";',
 			),
 	},
@@ -36,16 +36,16 @@ const FILES = [
 		transform: (content) =>
 			content
 				.replace(
-					'import type { AgentToolResult } from "@mariozechner/pi-agent-core";',
+					'import type { AgentToolResult } from "@earendil-works/pi-agent-core";',
 					'import type { AgentToolResult } from "../../types.js";',
 				)
 				.replace(
-					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "@mariozechner/pi-coding-agent";',
+					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "@code-yeongyu/senpi";',
 					'import { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
 				)
 				.replace(
-					'import type { AgentToolResult } from "../../types.js";\nimport type { Model } from "@mariozechner/pi-ai";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";\nimport { Type } from "typebox";',
-					'import type { Model } from "@mariozechner/pi-ai";\nimport { Type } from "typebox";\nimport type { AgentToolResult } from "../../types.js";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
+					'import type { AgentToolResult } from "../../types.js";\nimport type { Model } from "@earendil-works/pi-ai";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";\nimport { Type } from "typebox";',
+					'import type { Model } from "@earendil-works/pi-ai";\nimport { Type } from "typebox";\nimport type { AgentToolResult } from "../../types.js";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
 				),
 	},
 ];

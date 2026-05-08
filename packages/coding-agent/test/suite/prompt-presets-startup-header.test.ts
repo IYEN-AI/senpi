@@ -1,4 +1,4 @@
-import type { Component } from "@mariozechner/pi-tui";
+import type { Component } from "@earendil-works/pi-tui";
 import { describe, expect, it } from "vitest";
 import promptPresetExtension from "../../src/core/extensions/builtin/prompt-preset/index.js";
 

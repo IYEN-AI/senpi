@@ -1,4 +1,4 @@
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { BuildDynamicSystemPromptOptions } from "../../../dynamic-prompt/build.js";
 import { buildClaudeOpus45Prompt } from "./claude-opus-4-5.js";
 import { buildClaudeOpus46Prompt } from "./claude-opus-4-6.js";

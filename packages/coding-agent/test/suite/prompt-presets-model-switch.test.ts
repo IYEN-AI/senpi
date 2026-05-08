@@ -45,11 +45,11 @@ describe("prompt preset model switching", () => {
 		const promptChange = await harness.session.setModel(getRequiredModel(harness, "claude-opus-4-7"));
 
 		// then
-		expect(promptChange?.systemPromptName).toBe("claude-opus");
-		expect(harness.session.systemPrompt).toContain("## Model Notes (Claude Opus)");
-		expect(extensionEvents).toEqual(["gpt-5.5->claude-opus-4-7:claude-opus"]);
+		expect(promptChange?.systemPromptName).toBe("claude-opus-4-7");
+		expect(harness.session.systemPrompt).toContain("Maintain coherent state");
+		expect(extensionEvents).toEqual(["gpt-5.5->claude-opus-4-7:claude-opus-4-7"]);
 		expect(harness.eventsOfType("system_prompt_change").map((event) => event.systemPromptName)).toEqual([
-			"claude-opus",
+			"claude-opus-4-7",
 		]);
 	});
 
@@ -73,13 +73,13 @@ describe("prompt preset model switching", () => {
 		// then
 		expect(promptChange?.systemPromptName).toBe("fallback (senpi-current)");
 		expect(harness.session.systemPrompt).toContain("## Available Tools");
-		expect(harness.session.systemPrompt).not.toContain("## Model Notes (Claude Opus)");
+		expect(harness.session.systemPrompt).not.toContain("Maintain coherent state");
 		expect(harness.eventsOfType("system_prompt_change").map((event) => event.systemPromptName)).toEqual([
 			"fallback (senpi-current)",
 		]);
 	});
 
-	it("does not emit system_prompt_change when the resolved prompt is already active", async () => {
+	it("emits system_prompt_change when switching between Opus version presets", async () => {
 		// given
 		const harness = await createHarness({
 			models: [
@@ -97,8 +97,10 @@ describe("prompt preset model switching", () => {
 		const promptChange = await harness.session.setModel(getRequiredModel(harness, "claude-opus-4-6"));
 
 		// then
-		expect(promptChange).toBeUndefined();
-		expect(harness.session.systemPrompt).toContain("## Model Notes (Claude Opus)");
-		expect(harness.eventsOfType("system_prompt_change")).toEqual([]);
+		expect(promptChange?.systemPromptName).toBe("claude-opus-4-6");
+		expect(harness.session.systemPrompt).toContain("Default output is thorough");
+		expect(harness.eventsOfType("system_prompt_change").map((event) => event.systemPromptName)).toEqual([
+			"claude-opus-4-6",
+		]);
 	});
 });

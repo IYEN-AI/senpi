@@ -6,12 +6,13 @@
 
 ## OVERVIEW
 
-Fork of [badlogic/pi-mono](https://github.com/badlogic/pi-mono). TypeScript monorepo for AI agent tooling: multi-provider LLM API, agent runtime, coding agent CLI, TUI library, web UI components, web UI components. Built with npm workspaces, tsgo (native TS compiler), Vitest.
+Fork of [badlogic/pi-mono](https://github.com/code-yeongyu/sanepi-mono). TypeScript monorepo for AI agent tooling: multi-provider LLM API, agent runtime, coding agent CLI, TUI library, web UI components, web UI components. Built with npm workspaces, tsgo (native TS compiler), Vitest.
 
 ## FORK STRATEGY (CRITICAL)
 
-This repo is a **fork** of `upstream` ([badlogic/pi-mono](https://github.com/badlogic/pi-mono)). All work must minimize merge conflict surface with upstream.
+This repo is a **fork** of `upstream` ([badlogic/pi-mono](https://github.com/code-yeongyu/sanepi-mono)). All work must minimize merge conflict surface with upstream.
 
+- Read files in full before making wide-ranging changes, before editing files you have not already fully inspected, and when the user asks you to investigate or audit something. Do not rely only on search snippets for broad changes.
 - No `any` types unless absolutely necessary
 - Check node_modules for external API type definitions instead of guessing
 - **NEVER use inline imports** - no `await import("./foo.js")`, no `import("pkg").Type` in type positions, no dynamic imports for types. Always use standard top-level imports.
@@ -111,7 +112,7 @@ Use these sections under `## [Unreleased]`:
 
 ### Rules
 
-1. **Builtin extension-first**: All changes and feature additions MUST use pi-mono's [extension system](packages/coding-agent/docs/extensions.md). Add **builtin extensions** at `packages/coding-agent/src/core/extensions/builtin/` and register them in `builtin/index.ts`. These load automatically via `resource-loader.ts` without requiring `.pi/extensions/` or `~/.pi/agent/extensions/`.
+1. **Builtin extension-first**: All changes and feature additions MUST use pi-mono's [extension system](packages/coding-agent/docs/extensions.md). Add **builtin extensions** at `packages/coding-agent/src/core/extensions/builtin/` and register them in `builtin/index.ts`. These load automatically via `resource-loader.ts` without requiring `.senpi/extensions/` or `~/.senpi/agent/extensions/`.
 2. **If extension is impossible**: Only then modify upstream source. When you do, create/update a `changes.md` in the affected subdirectory documenting:
    - What was changed and why
    - Which files were modified
@@ -133,7 +134,7 @@ Use these sections under `## [Unreleased]`:
 | UI customization | `pi.ui.setFooter()`, `setWidget()`, etc. | `examples/extensions/custom-footer.ts` |
 | Custom renderers | `pi.registerMessageRenderer()` | Extension docs |
 
-Extensions load from: builtin (`packages/coding-agent/src/core/extensions/builtin/`), `.pi/extensions/` (project-local), `~/.pi/agent/extensions/` (global), or `-e ./path.ts` (ad-hoc).
+Extensions load from: builtin (`packages/coding-agent/src/core/extensions/builtin/`), `.senpi/extensions/` (project-local), `~/.senpi/agent/extensions/` (global), or `-e ./path.ts` (ad-hoc).
 
 ## STRUCTURE
 

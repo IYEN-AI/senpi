@@ -11,8 +11,8 @@
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@code-yeongyu/senpi";
-import { StringEnum } from "@mariozechner/pi-ai";
-import { matchesKey, Text, truncateToWidth } from "@mariozechner/pi-tui";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 interface Todo {

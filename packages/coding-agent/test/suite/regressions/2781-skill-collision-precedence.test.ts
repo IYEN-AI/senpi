@@ -9,6 +9,7 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 	let tempDir: string;
 	let agentDir: string;
 	let cwd: string;
+	let originalHome: string | undefined;
 
 	beforeEach(() => {
 		tempDir = join(tmpdir(), `pi-2781-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -16,9 +17,16 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 		cwd = join(tempDir, "project");
 		mkdirSync(agentDir, { recursive: true });
 		mkdirSync(cwd, { recursive: true });
+		originalHome = process.env.HOME;
+		process.env.HOME = tempDir;
 	});
 
 	afterEach(() => {
+		if (originalHome === undefined) {
+			delete process.env.HOME;
+		} else {
+			process.env.HOME = originalHome;
+		}
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 

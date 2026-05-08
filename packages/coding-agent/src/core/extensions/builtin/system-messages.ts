@@ -1,4 +1,4 @@
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { CustomMessage } from "../../messages.js";
 import type { ExtensionAPI } from "../types.js";
 

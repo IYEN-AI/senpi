@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@code-yeongyu/senpi";
 import { DynamicBorder, getMarkdownTheme } from "@code-yeongyu/senpi";
-import { complete, getModel } from "@mariozechner/pi-ai";
-import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
+import { complete, getModel } from "@earendil-works/pi-ai";
+import { Container, Markdown, matchesKey, Text } from "@earendil-works/pi-tui";
 
 type ContentBlock = {
 	type?: string;

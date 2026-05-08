@@ -18,8 +18,8 @@
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme, ToolExecutionMode } from "@code-yeongyu/senpi";
-import { StringEnum } from "@mariozechner/pi-ai";
-import { type Component, matchesKey, Text, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { type Component, matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 // Thrown from the tool on illegal actions. The agent runtime surfaces thrown

@@ -1,4 +1,4 @@
-import { Container, Text } from "@mariozechner/pi-tui";
+import { Container, Text } from "@earendil-works/pi-tui";
 import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.js";
 import type { ExtensionAPI, ExtensionContext } from "../types.js";
 

@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@code-yeongyu/senpi";
 import { getSettingsListTheme } from "@code-yeongyu/senpi";
-import { Container, type SettingItem, SettingsList } from "@mariozechner/pi-tui";
+import { Container, type SettingItem, SettingsList } from "@earendil-works/pi-tui";
 
 // State persisted to session
 interface ToolsState {

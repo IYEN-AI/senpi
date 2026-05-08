@@ -5,7 +5,7 @@
  */
 
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
-import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth } from "@mariozechner/pi-tui";
+import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 interface OptionWithDesc {

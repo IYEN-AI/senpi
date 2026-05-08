@@ -1,4 +1,4 @@
-import type { Api } from "@mariozechner/pi-ai";
+import type { Api } from "@earendil-works/pi-ai";
 import { SettingsManager } from "../../settings-manager.js";
 import type { ExtensionAPI, ServiceTier } from "../types.js";
 

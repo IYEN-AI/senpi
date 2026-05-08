@@ -4,7 +4,7 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Api, TextContent } from "@mariozechner/pi-ai";
+import type { Api, TextContent } from "@earendil-works/pi-ai";
 import { type Static, Type } from "typebox";
 import type { AgentToolResult, ExtensionAPI } from "../../types.js";
 

@@ -18,18 +18,18 @@ describe("upstream package name alias for extension loader", () => {
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("resolves runtime imports from @mariozechner/pi-coding-agent", async () => {
+	it("resolves runtime imports from @code-yeongyu/senpi", async () => {
 		// given a third-party extension that imports a runtime helper
 		// from the upstream package name (the case for any pi-extension
 		// authored against pi-mono and run under senpi)
 		const extCode = `
-			import { defineTool } from "@mariozechner/pi-coding-agent";
+			import { defineTool } from "@code-yeongyu/senpi";
 			import { Type } from "typebox";
 
 			const upstreamTool = defineTool({
 				name: "upstream_aliased_tool",
 				label: "Upstream Aliased Tool",
-				description: "Verifies @mariozechner/pi-coding-agent resolves under senpi",
+				description: "Verifies @code-yeongyu/senpi resolves under senpi",
 				parameters: Type.Object({}),
 				execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
 			});
@@ -51,13 +51,13 @@ describe("upstream package name alias for extension loader", () => {
 		expect(result.extensions[0]?.tools.has("upstream_aliased_tool")).toBe(true);
 	});
 
-	it("resolves type-only imports from @mariozechner/pi-coding-agent", async () => {
+	it("resolves type-only imports from @code-yeongyu/senpi", async () => {
 		// given a third-party extension that uses a type-only import
 		// (the most common shape for upstream-named imports). Type-only
 		// imports erase at runtime but a missing alias still surfaces
 		// when the bundler/transpiler eagerly resolves the specifier
 		const extCode = `
-			import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+			import type { ExtensionAPI } from "@code-yeongyu/senpi";
 			import { Type } from "typebox";
 
 			export default function (pi: ExtensionAPI) {

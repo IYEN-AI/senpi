@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { fauxAssistantMessage } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AGENT_TYPE_ENV_VAR } from "../../../src/core/extensions/builtin/background-task/types.js";
 import type { BeforeAgentStartEvent, ExtensionContext } from "../../../src/core/extensions/types.js";

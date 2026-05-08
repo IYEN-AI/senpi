@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { SettingsManager } from "../../../../settings-manager.js";
 import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../../types.js";
 import { emitBuiltinSystemMessageFailure, sendBuiltinUserMessage } from "../../system-messages.js";

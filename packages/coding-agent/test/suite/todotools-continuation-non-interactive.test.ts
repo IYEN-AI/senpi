@@ -1,4 +1,4 @@
-import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
+import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import todotoolsExtension from "../../src/core/extensions/builtin/todotools/index.js";
 import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.js";

@@ -13,7 +13,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@code-yeongyu/senpi";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 
 // Custom auth storage location
 const authStorage = AuthStorage.create("/tmp/my-agent/auth.json");

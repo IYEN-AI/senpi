@@ -14,9 +14,9 @@
   <a href="https://github.com/code-yeongyu/sanepi-mono/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/code-yeongyu/sanepi-mono/ci.yml?style=flat-square&branch=main" /></a>
 </p>
 
-An opinionated fork of [badlogic/pi-mono](https://github.com/badlogic/pi-mono) that turns the coding agent into **senpi**: a senpai-name pun, and a more sane pi with extra batteries included.
+An opinionated fork of [badlogic/pi-mono](https://github.com/code-yeongyu/sanepi-mono) that turns the coding agent into **senpi**: a senpai-name pun, and a more sane pi with extra batteries included.
 
-> **Upstream**: [pi-mono](https://github.com/badlogic/pi-mono) by [@mariozechner](https://github.com/badlogic) -- tools for building AI agents and managing LLM deployments.
+> **Upstream**: [pi-mono](https://github.com/code-yeongyu/sanepi-mono) by [@mariozechner](https://github.com/badlogic) -- tools for building AI agents and managing LLM deployments.
 
 ## What This Fork Adds
 
@@ -98,7 +98,7 @@ This fork rebases periodically on `upstream/main`. To minimize merge conflicts:
 
 1. **Extension-first**: All features use pi's [extension system](packages/coding-agent/docs/extensions.md) as builtin extensions.
 2. **Document core changes**: Every upstream file modification has a corresponding `changes.md` in the affected subdirectory, documenting what changed, why, and expected conflict zones.
-3. **Remotes**: `origin` = [code-yeongyu/sanepi-mono](https://github.com/code-yeongyu/sanepi-mono), `upstream` = [badlogic/pi-mono](https://github.com/badlogic/pi-mono).
+3. **Remotes**: `origin` = [code-yeongyu/sanepi-mono](https://github.com/code-yeongyu/sanepi-mono), `upstream` = [badlogic/pi-mono](https://github.com/code-yeongyu/sanepi-mono).
 
 Modified upstream files:
 
@@ -125,19 +125,17 @@ I regularly publish my own `pi-mono` work sessions here:
 
 - [badlogicgames/pi-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/pi-mono)
 
-## Packages
+## All Packages
 
 | Package | Description |
 |---------|-------------|
-| **[@mariozechner/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
-| **[@mariozechner/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
+| **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
+| **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
 | **[@code-yeongyu/senpi](packages/coding-agent)** | Interactive coding agent CLI, rebranded as senpi |
-| **[@mariozechner/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
-| **[@mariozechner/pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
+| **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+| **[@earendil-works/pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
 
-## Chat bot workflows
-
-For Slack/chat automation, see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
+For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 
 ## Development
 

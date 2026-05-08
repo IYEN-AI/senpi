@@ -6,7 +6,7 @@ Example extensions for pi-coding-agent.
 
 ```bash
 # Load an extension with --extension flag
-senpi --extension examples/extensions/permission-gate.ts
+pi --extension examples/extensions/permission-gate.ts
 
 # Or copy to extensions directory for auto-discovery
 cp permission-gate.ts ~/.senpi/agent/extensions/
@@ -96,7 +96,7 @@ cp permission-gate.ts ~/.senpi/agent/extensions/
 
 | Extension | Description |
 |-----------|-------------|
-| `mac-system-theme.ts` | Syncs pi theme with macOS dark/light mode |
+| `mac-system-theme.ts` | Syncs senpi theme with macOS dark/light mode |
 
 ### Resources
 
@@ -179,7 +179,7 @@ export default function (pi: ExtensionAPI) {
 
 **Use StringEnum for string parameters** (required for Google API compatibility):
 ```typescript
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
 
 // Good
 action: StringEnum(["list", "add"] as const)

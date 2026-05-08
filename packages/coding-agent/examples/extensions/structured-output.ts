@@ -6,7 +6,7 @@
  */
 
 import { defineTool, type ExtensionAPI } from "@code-yeongyu/senpi";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 interface StructuredOutputDetails {

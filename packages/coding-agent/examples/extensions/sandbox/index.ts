@@ -11,9 +11,9 @@
  *
  * Config files (merged, project takes precedence):
  * - ~/.senpi/agent/extensions/sandbox.json (global)
- * - <cwd>/.pi/sandbox.json (project-local)
+ * - <cwd>/.senpi/sandbox.json (project-local)
  *
- * Example .pi/sandbox.json:
+ * Example .senpi/sandbox.json:
  * ```json
  * {
  *   "enabled": true,
@@ -30,8 +30,8 @@
  * ```
  *
  * Usage:
- * - `pi -e ./sandbox` - sandbox enabled with default/config settings
- * - `pi -e ./sandbox --no-sandbox` - disable sandboxing
+ * - `senpi -e ./sandbox` - sandbox enabled with default/config settings
+ * - `senpi -e ./sandbox --no-sandbox` - disable sandboxing
  * - `/sandbox` - show current sandbox configuration
  *
  * Setup:

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverAndLoadExtensions } from "../../src/core/extensions/loader.js";
 import type { ExtensionAPI, ToolDefinition } from "../../src/core/extensions/types.js";

@@ -1,6 +1,6 @@
 # Termux (Android) Setup
 
-Senpi runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
+Pi runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
 
 ## Prerequisites
 
@@ -16,14 +16,14 @@ pkg update && pkg upgrade
 # Install dependencies
 pkg install nodejs termux-api git
 
-# Install senpi
+# Install pi
 npm install -g @code-yeongyu/senpi
 
 # Create config directory
 mkdir -p ~/.senpi/agent
 
-# Run senpi
-senpi
+# Run pi
+pi
 ```
 
 ## Clipboard Support

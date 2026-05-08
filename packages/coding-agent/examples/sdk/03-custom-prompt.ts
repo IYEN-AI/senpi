@@ -4,21 +4,69 @@
  * Shows how to replace or modify the default system prompt.
  */
 
-import { createAgentSession, SessionManager } from "@code-yeongyu/senpi";
+import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@code-yeongyu/senpi";
 
-// Note: DefaultResourceLoader no longer supports systemPromptOverride.
-// Use system prompt events in extensions or modify APPEND_SYSTEM.md instead.
+const cwd = process.cwd();
+const agentDir = getAgentDir();
 
-const { session } = await createAgentSession({
+// Option 1: Replace AGENTS-style instructions entirely
+const loader1 = new DefaultResourceLoader({
+	cwd,
+	agentDir,
+	agentsFilesOverride: () => ({
+		agentsFiles: [
+			{
+				path: "inline://pirate-agents.md",
+				content: `You are a helpful assistant that speaks like a pirate.
+Always end responses with "Arrr!"`,
+			},
+		],
+	}),
+});
+await loader1.reload();
+
+const { session: session1 } = await createAgentSession({
+	resourceLoader: loader1,
 	sessionManager: SessionManager.inMemory(),
 });
 
-session.subscribe((event) => {
+session1.subscribe((event) => {
 	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 		process.stdout.write(event.assistantMessageEvent.delta);
 	}
 });
 
-console.log("=== Custom prompt via APPEND_SYSTEM.md ===");
-await session.prompt("What is 2 + 2?");
+console.log("=== Replace prompt ===");
+await session1.prompt("What is 2 + 2?");
 console.log("\n");
+
+// Option 2: Append AGENTS-style instructions to the defaults
+const loader2 = new DefaultResourceLoader({
+	cwd,
+	agentDir,
+	agentsFilesOverride: (base) => ({
+		agentsFiles: [
+			...base.agentsFiles,
+			{
+				path: "inline://additional-instructions.md",
+				content: "## Additional Instructions\n- Always be concise\n- Use bullet points when listing things",
+			},
+		],
+	}),
+});
+await loader2.reload();
+
+const { session: session2 } = await createAgentSession({
+	resourceLoader: loader2,
+	sessionManager: SessionManager.inMemory(),
+});
+
+session2.subscribe((event) => {
+	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+		process.stdout.write(event.assistantMessageEvent.delta);
+	}
+});
+
+console.log("=== Modify prompt ===");
+await session2.prompt("List 3 benefits of TypeScript.");
+console.log();

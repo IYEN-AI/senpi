@@ -1,10 +1,11 @@
-import { fauxAssistantMessage, fauxToolCall } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import backgroundTaskExtension from "../../src/core/extensions/builtin/background-task/index.js";
 import { createTestExtensionsResult, createTestResourceLoader } from "../utilities.js";
 import { createHarness, type Harness } from "./harness.js";
 
 vi.mock("node:child_process", () => ({
+	execFile: vi.fn(),
 	spawn: vi.fn(),
 }));
 
@@ -125,7 +126,7 @@ describe("background-task extension", () => {
 		while (harnesses.length > 0) {
 			harnesses.pop()?.cleanup();
 		}
-		mockSpawn.mockClear();
+		mockSpawn.mockReset();
 		vi.unstubAllEnvs();
 	});
 
@@ -140,16 +141,15 @@ describe("background-task extension", () => {
 			expect(task.description).toBe("Test task");
 		});
 
-		it("max concurrent tasks enforced (8 limit)", () => {
+		it("does not enforce a concurrent task limit when configured as unlimited", () => {
 			const manager = new BackgroundManager();
 
-			for (let i = 0; i < MAX_CONCURRENT_TASKS; i++) {
+			for (let i = 0; i < 16; i++) {
 				manager.launch(createTaskInput({ description: `Task ${i}`, prompt: `Do ${i}` }));
 			}
 
-			expect(() => {
-				manager.launch(createTaskInput({ description: "Overflow task", prompt: "Do overflow" }));
-			}).toThrow(`Maximum concurrent tasks (${MAX_CONCURRENT_TASKS}) reached`);
+			expect(MAX_CONCURRENT_TASKS).toBe(Number.POSITIVE_INFINITY);
+			expect(manager.getActiveTasks()).toHaveLength(16);
 		});
 
 		it("cancel sets status and returns correct boolean", () => {
@@ -314,6 +314,8 @@ describe("background-task extension", () => {
 			expect(text).toMatch(/Background Task ID: bg_[0-9a-f]{8}/);
 			expect(text).toContain("Description: Async task");
 			expect(text).toContain("Do NOT call background_output now. Wait for <system-reminder> notification first.");
+
+			await new Promise((resolve) => setTimeout(resolve, 25));
 		});
 
 		it("renderResult shows compact resolved overview when details are provided", () => {

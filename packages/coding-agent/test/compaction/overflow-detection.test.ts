@@ -1,4 +1,4 @@
-import { fauxOverflowError } from "@mariozechner/pi-ai";
+import { fauxOverflowError } from "@earendil-works/pi-ai";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	HIGH_CONFIDENCE_PATTERNS,

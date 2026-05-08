@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssistantMessage, Context, Message, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
-import { complete, fauxAssistantMessage, registerFauxProvider, repairOrphanedToolResults } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Context, Message, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { complete, fauxAssistantMessage, registerFauxProvider, repairOrphanedToolResults } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	type FileEntry,

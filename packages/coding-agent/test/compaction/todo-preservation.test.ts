@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { registerFauxProvider } from "@mariozechner/pi-ai";
+import { registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
 	captureTodoSnapshot,

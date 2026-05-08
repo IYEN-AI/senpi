@@ -359,9 +359,22 @@ Content`,
 				"<builtin:prompt-preset>",
 				"<builtin:todowrite>",
 				"<builtin:redraws>",
+				"<builtin:anthropic-web-search>",
+				"<builtin:anthropic-web-fetch>",
+				"<builtin:anthropic-tool-search>",
+				"<builtin:anthropic-code-execution>",
+				"<builtin:anthropic-bash>",
+				"<builtin:anthropic-text-editor>",
+				"<builtin:anthropic-computer-use>",
+				"<builtin:openai-web-search>",
+				"<builtin:openai-code-interpreter>",
+				"<builtin:google-google-search>",
+				"<builtin:google-code-execution>",
+				"<builtin:google-url-context>",
 				"<builtin:openai-api-parallel-tool-calls>",
 				"<builtin:service-tier>",
 				"<builtin:bash-timeout>",
+				"<builtin:tool-pair-guard>",
 				"<builtin:compaction>",
 			]);
 		});
@@ -614,7 +627,7 @@ Content`,
 			writeFileSync(
 				join(ext1Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -629,7 +642,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(ext2Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -656,7 +669,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(globalExtDir, "global.ts"),
 				`
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -675,7 +688,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				explicitExtPath,
 				`
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({

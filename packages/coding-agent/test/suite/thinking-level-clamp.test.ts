@@ -1,4 +1,4 @@
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { clampThinkingLevelToModel } from "../../src/core/sdk.js";
 

@@ -2,7 +2,7 @@
 
 # SDK
 
-The SDK provides programmatic access to senpi's agent capabilities. Use it to embed senpi in other applications, build custom interfaces, or integrate with automated workflows.
+The SDK provides programmatic access to pi's agent capabilities. Use it to embed senpi in other applications, build custom interfaces, or integrate with automated workflows.
 
 **Example use cases:**
 - Build a custom UI (web, desktop, mobile)
@@ -239,7 +239,7 @@ Both `steer()` and `followUp()` expand file-based prompt templates but error on 
 
 ### Agent and AgentState
 
-The `Agent` class (from `@mariozechner/pi-agent-core`) handles the core LLM interaction. Access it via `session.agent`.
+The `Agent` class (from `@earendil-works/pi-agent-core`) handles the core LLM interaction. Access it via `session.agent`.
 
 ```typescript
 // Access current state
@@ -338,14 +338,14 @@ const { session } = await createAgentSession({
   cwd: process.cwd(), // default
   
   // Global config directory
-agentDir: "~/.senpi/agent", // default (expands ~)
+  agentDir: "~/.senpi/agent", // default (expands ~)
 });
 ```
 
 `cwd` is used by `DefaultResourceLoader` for:
 - Project extensions (`.senpi/extensions/`)
 - Project skills:
-- `.senpi/skills/`
+  - `.senpi/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
 - Project prompts (`.senpi/prompts/`)
 - Context files (`AGENTS.md` walking up from cwd)
@@ -354,7 +354,7 @@ agentDir: "~/.senpi/agent", // default (expands ~)
 `agentDir` is used by `DefaultResourceLoader` for:
 - Global extensions (`extensions/`)
 - Global skills:
-- `skills/` under `agentDir` (for example `~/.senpi/agent/skills/`)
+  - `skills/` under `agentDir` (for example `~/.senpi/agent/skills/`)
   - `~/.agents/skills/`
 - Global prompts (`prompts/`)
 - Global context file (`AGENTS.md`)
@@ -368,7 +368,7 @@ When you pass a custom `ResourceLoader`, `cwd` and `agentDir` no longer control 
 ### Model
 
 ```typescript
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@code-yeongyu/senpi";
 
 const authStorage = AuthStorage.create();
@@ -518,7 +518,7 @@ const { session } = await createAgentSession({
 ```
 
 **When you don't need factories:**
-- If you omit `tools`, pi automatically creates them with the correct `cwd`
+- If you omit `tools`, senpi automatically creates them with the correct `cwd`
 - If you use `process.cwd()` as your `cwd`, the pre-built instances work fine
 
 **When you must use factories:**
@@ -881,7 +881,7 @@ interface LoadExtensionsResult {
 ## Complete Example
 
 ```typescript
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import {
   AuthStorage,
@@ -1081,7 +1081,7 @@ See [RPC documentation](rpc.md) for the JSON protocol.
 For subprocess-based integration without building with the SDK, use the CLI directly:
 
 ```bash
-senpi --mode rpc --no-session
+pi --mode rpc --no-session
 ```
 
 See [RPC documentation](rpc.md) for the JSON protocol.

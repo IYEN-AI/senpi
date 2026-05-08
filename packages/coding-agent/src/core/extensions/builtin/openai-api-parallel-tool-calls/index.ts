@@ -1,4 +1,4 @@
-import type { Api } from "@mariozechner/pi-ai";
+import type { Api } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "../../types.js";
 
 type ProviderPayload = Record<string, unknown>;

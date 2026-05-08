@@ -1,4 +1,4 @@
-import { fauxAssistantMessage, registerFauxProvider } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../../src/core/auth-storage.js";
 import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";

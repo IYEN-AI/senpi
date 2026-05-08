@@ -1,4 +1,4 @@
-import { fauxAssistantMessage } from "@mariozechner/pi-ai";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CompactionResult } from "../../src/core/compaction/index.js";
 import { createHarness, type Harness } from "./harness.js";
