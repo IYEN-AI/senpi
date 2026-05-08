@@ -25,11 +25,6 @@
 			"version": "0.1.0",
 			"source": "../pi-extensions/pi-google-url-context"
 		},
-		"webfetch": {
-			"packageName": "pi-webfetch",
-			"version": "0.1.0",
-			"source": "../pi-extensions/pi-webfetch"
-		},
 		"gpt-apply-patch": {
 			"packageName": "pi-apply-patch",
 			"version": "0.1.0",

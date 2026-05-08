@@ -289,8 +289,9 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 	const compat = getCompat(model);
+	const requestModel = typeof options?.extraBody?.model === "string" ? options.extraBody.model : model.id;
 	const params: ResponseCreateParamsStreaming = {
-		model: model.id,
+		model: requestModel,
 		input: messages,
 		stream: true,
 		prompt_cache_key: cacheRetention === "none" ? undefined : options?.sessionId,
@@ -308,6 +309,9 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	if (options?.serviceTier !== undefined) {
 		params.service_tier = options.serviceTier;
+	}
+	if (params.service_tier === undefined && typeof options?.extraBody?.service_tier === "string") {
+		params.service_tier = options.extraBody.service_tier as ResponseCreateParamsStreaming["service_tier"];
 	}
 
 	if (context.tools && context.tools.length > 0) {
