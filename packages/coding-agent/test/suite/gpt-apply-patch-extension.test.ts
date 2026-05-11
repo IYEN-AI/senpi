@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripAnsi from "strip-ansi";
 import { afterEach, describe, expect, it } from "vitest";
@@ -239,25 +239,40 @@ describe("gpt-apply-patch builtin extension", () => {
 		expect(rendered).not.toContain("Index:");
 	});
 
-	it("rejects absolute and parent-escaping paths", async () => {
+	it("applies absolute and parent-escaping paths", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
 		const tool = createApplyPatchTool();
+		const outsideParentName = `${path.basename(harness.tempDir)}-parent.txt`;
+		const outsideParentPath = path.join(path.dirname(harness.tempDir), outsideParentName);
+		const absoluteOutsidePath = path.join(
+			path.dirname(harness.tempDir),
+			`${path.basename(harness.tempDir)}-absolute.txt`,
+		);
 
-		await expect(
-			tool.execute(
+		try {
+			const result = await tool.execute(
 				"call-1",
 				{
 					input: `*** Begin Patch
-*** Add File: ../outside.txt
+*** Add File: ../${outsideParentName}
 +escape
+*** Add File: ${absoluteOutsidePath}
++absolute
 *** End Patch`,
 				},
 				undefined,
 				undefined,
 				{ cwd: harness.tempDir } as Parameters<typeof tool.execute>[4],
-			),
-		).rejects.toThrow("within the current workspace");
+			);
+
+			expect(result.content.find((block) => block.type === "text")?.text).toContain(`add: ../${outsideParentName}`);
+			expect(await readFile(outsideParentPath, "utf-8")).toBe("escape\n");
+			expect(await readFile(absoluteOutsidePath, "utf-8")).toBe("absolute\n");
+		} finally {
+			await rm(outsideParentPath, { force: true });
+			await rm(absoluteOutsidePath, { force: true });
+		}
 	});
 
 	it("replaces write and edit with apply_patch for OpenAI GPT models from session start", async () => {

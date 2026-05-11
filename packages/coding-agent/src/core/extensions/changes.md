@@ -1,5 +1,33 @@
 # Core Extensions Changes
 
+## 2026-05-11 - GPT apply_patch External Path Support
+
+### What changed
+
+- `builtin/gpt-apply-patch/workspace.ts`: Removed workspace-boundary and realpath validation from path resolution.
+- `builtin/gpt-apply-patch/apply.ts` and `preview.ts`: Resolve patch paths with Node `path.resolve(cwd, filePath)` and allow absolute, parent-escaping, and symlink-escaping targets.
+- `test/suite/gpt-apply-patch-backport.test.ts`: Added regression coverage for absolute paths outside the current workspace and symlink paths resolving outside it.
+
+### Why
+
+- Codex-style patch payloads can legitimately target files outside the session cwd, for example adjacent worktrees or debug journals. The previous guard rejected those paths with `File references must stay within the current workspace.`
+
+### Why extension system couldn't handle this alone
+
+- `gpt-apply-patch` is a builtin extension and the path policy lives inside its vendored implementation.
+
+### Files modified
+
+- `builtin/gpt-apply-patch/workspace.ts`
+- `builtin/gpt-apply-patch/apply.ts`
+- `builtin/gpt-apply-patch/preview.ts`
+- `../../test/suite/gpt-apply-patch-backport.test.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `builtin/gpt-apply-patch/workspace.ts` path resolution helpers.
+- LOW: `builtin/gpt-apply-patch/apply.ts` and `preview.ts` imports/call sites for the path resolver.
+
 ## 2026-05-08 - Generated Default Extension Factory Resolver
 
 ### What changed

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -156,5 +156,47 @@ describe("gpt-apply-patch backported behavior", () => {
 		);
 		expect(summaries).toEqual(["add: nested/new.txt"]);
 		expect(await readFile(path.join(harness.tempDir, "nested/new.txt"), "utf-8")).toBe("hello\n");
+	});
+
+	it("applies patches to absolute paths outside the current workspace", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		const outsidePath = path.join(path.dirname(harness.tempDir), `${path.basename(harness.tempDir)}-outside.txt`);
+
+		try {
+			await applyPatch(
+				harness.tempDir,
+				`*** Begin Patch
+*** Add File: ${outsidePath}
++outside
+*** End Patch`,
+			);
+
+			expect(await readFile(outsidePath, "utf-8")).toBe("outside\n");
+		} finally {
+			await rm(outsidePath, { force: true });
+		}
+	});
+
+	it("applies patches through symlinks that resolve outside the current workspace", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		const outsideDirectory = path.join(path.dirname(harness.tempDir), `${path.basename(harness.tempDir)}-outside`);
+		await mkdir(outsideDirectory);
+		await symlink(outsideDirectory, path.join(harness.tempDir, "link"), "dir");
+
+		try {
+			await applyPatch(
+				harness.tempDir,
+				`*** Begin Patch
+*** Add File: link/outside.txt
++outside
+*** End Patch`,
+			);
+
+			expect(await readFile(path.join(outsideDirectory, "outside.txt"), "utf-8")).toBe("outside\n");
+		} finally {
+			await rm(outsideDirectory, { recursive: true, force: true });
+		}
 	});
 });

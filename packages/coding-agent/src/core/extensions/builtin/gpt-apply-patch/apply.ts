@@ -11,7 +11,7 @@ import type {
 	AtomicWriteOperations,
 	ParsedPatch,
 } from "./types.js";
-import { assertWorkspacePath, resolveWorkspacePath } from "./workspace.js";
+import { resolvePatchPath } from "./workspace.js";
 
 const ATOMIC_WRITE_OPERATIONS: AtomicWriteOperations = { writeFile, rename, unlink };
 
@@ -47,17 +47,15 @@ async function applySingleHunk(
 	cwd: string,
 	hunk: ParsedPatch,
 ): Promise<{ summary: string; appliedFile: string; fuzz: number }> {
-	const absolutePath = await resolveWorkspacePath(cwd, hunk.filePath);
+	const absolutePath = resolvePatchPath(cwd, hunk.filePath);
 	if (hunk.type === "add") {
 		await mkdir(path.dirname(absolutePath), { recursive: true });
-		await assertWorkspacePath(cwd, absolutePath);
 		await writeFileAtomic(absolutePath, hunk.content);
 		return { summary: `add: ${hunk.filePath}`, appliedFile: hunk.filePath, fuzz: 0 };
 	}
 
 	if (hunk.type === "delete") {
 		await stat(absolutePath);
-		await assertWorkspacePath(cwd, absolutePath);
 		await rm(absolutePath);
 		return { summary: `delete: ${hunk.filePath}`, appliedFile: hunk.filePath, fuzz: 0 };
 	}
@@ -69,9 +67,8 @@ async function applySingleHunk(
 			: replaceChunks(currentContent, hunk.filePath, hunk.chunks);
 
 	if (hunk.movePath) {
-		const absoluteMovePath = await resolveWorkspacePath(cwd, hunk.movePath);
+		const absoluteMovePath = resolvePatchPath(cwd, hunk.movePath);
 		await mkdir(path.dirname(absoluteMovePath), { recursive: true });
-		await assertWorkspacePath(cwd, absoluteMovePath);
 		await writeFileAtomic(absoluteMovePath, chunkResult.content);
 		if (absoluteMovePath !== absolutePath) await rm(absolutePath);
 		return {
@@ -81,7 +78,6 @@ async function applySingleHunk(
 		};
 	}
 
-	await assertWorkspacePath(cwd, absolutePath);
 	await writeFileAtomic(absolutePath, chunkResult.content);
 	return { summary: `update: ${hunk.filePath}`, appliedFile: hunk.filePath, fuzz: chunkResult.fuzz };
 }

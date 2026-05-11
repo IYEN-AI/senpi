@@ -4,7 +4,7 @@ import { createPatchDiff } from "./patch-diff.js";
 import { replaceChunks } from "./patch-replace.js";
 import { formatPatchPreview, formatPendingPatchPaths } from "./preview-format.js";
 import type { ApplyPatchPreview, ApplyPatchPreviewFile, ApplyPatchToolDetails, ParsedPatch } from "./types.js";
-import { resolveWorkspacePath } from "./workspace.js";
+import { resolvePatchPath } from "./workspace.js";
 
 async function readExistingFileForPreview(absolutePath: string): Promise<string> {
 	try {
@@ -18,7 +18,7 @@ async function readExistingFileForPreview(absolutePath: string): Promise<string>
 export async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Promise<ApplyPatchPreview> {
 	const files: ApplyPatchPreviewFile[] = [];
 	for (const hunk of hunks) {
-		const absolutePath = await resolveWorkspacePath(cwd, hunk.filePath);
+		const absolutePath = resolvePatchPath(cwd, hunk.filePath);
 		if (hunk.type === "add") {
 			const oldContent = await readExistingFileForPreview(absolutePath);
 			const diff = createPatchDiff(oldContent, hunk.content);
@@ -36,7 +36,7 @@ export async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Pro
 		const oldContent = await readFile(absolutePath, "utf-8");
 		const newContent =
 			hunk.chunks.length === 0 ? oldContent : replaceChunks(oldContent, hunk.filePath, hunk.chunks).content;
-		if (hunk.movePath) await resolveWorkspacePath(cwd, hunk.movePath);
+		if (hunk.movePath) resolvePatchPath(cwd, hunk.movePath);
 		const diff = createPatchDiff(oldContent, newContent);
 		files.push({ filePath: hunk.filePath, movePath: hunk.movePath, operation: "update", ...diff });
 	}
