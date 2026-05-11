@@ -16,6 +16,7 @@ export {
 	getApplyPatchRenderState,
 	PATCH_PREVIEW_MAX_CHARS,
 	PATCH_PREVIEW_MAX_LINES,
+	renderPatchPreview,
 	truncatePreview,
 } from "./preview-format.js";
 export { seekSequence } from "./seek-sequence.js";

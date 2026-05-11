@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripAnsi from "strip-ansi";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApplyPatchTool } from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
+import { createApplyPatchTool, renderPatchPreview } from "../../src/core/extensions/builtin/gpt-apply-patch/index.js";
 import type { ToolRenderContext } from "../../src/core/extensions/types.js";
 import { initTheme, theme } from "../../src/modes/interactive/theme/theme.js";
 import type { Harness } from "./harness.js";
@@ -11,6 +11,13 @@ import { createHarness } from "./harness.js";
 type ApplyPatchTool = ReturnType<typeof createApplyPatchTool>;
 type ApplyPatchArgs = { input: string };
 type ApplyPatchState = Record<string, unknown>;
+
+const markerTheme = {
+	fg: (name: string, text: string) => `<fg:${name}>${text}</fg:${name}>`,
+	bg: (name: string, text: string) => `<bg:${name}>${text}</bg:${name}>`,
+	bold: (text: string) => `<bold>${text}</bold>`,
+	inverse: (text: string) => `<inverse>${text}</inverse>`,
+};
 
 function createRenderContext(cwd: string, args: ApplyPatchArgs, overrides: Partial<ToolRenderContext> = {}) {
 	return {
@@ -97,5 +104,32 @@ describe("gpt apply_patch rich TUI rendering", () => {
 		expect(rendered).toContain("sample.txt (+1 -1)");
 		expect(rendered).toContain("-1 before");
 		expect(rendered).toContain("+1 after");
+	});
+
+	it("renders expanded patch previews with OpenCode-like highlighted diff rows", () => {
+		const rendered = renderPatchPreview(
+			{
+				files: [
+					{
+						filePath: "src/foo.ts",
+						operation: "update",
+						diff: "-1 alpha old\n+1 alpha new\n 2 same",
+						added: 1,
+						removed: 1,
+					},
+				],
+				added: 1,
+				removed: 1,
+			},
+			"/workspace/project",
+			markerTheme as never,
+			true,
+		);
+
+		expect(rendered).toContain("<bg:toolErrorBg><fg:toolDiffRemoved>-</fg:toolDiffRemoved><fg:muted>1</fg:muted>");
+		expect(rendered).toContain("<fg:toolDiffRemoved>alpha <inverse>old</inverse></fg:toolDiffRemoved>");
+		expect(rendered).toContain("<bg:toolSuccessBg><fg:toolDiffAdded>+</fg:toolDiffAdded><fg:muted>1</fg:muted>");
+		expect(rendered).toContain("<fg:toolDiffAdded>alpha <inverse>new</inverse></fg:toolDiffAdded>");
+		expect(rendered).toContain("<fg:toolDiffContext> </fg:toolDiffContext><fg:muted>2</fg:muted> same");
 	});
 });

@@ -87,9 +87,11 @@ export type ApplyPatchThemeColor =
 	| "toolOutput"
 	| "toolTitle";
 
+export type ApplyPatchThemeBg = "toolErrorBg" | "toolPendingBg" | "toolSuccessBg";
+
 export type ApplyPatchTheme = {
 	fg: (name: ApplyPatchThemeColor, text: string) => string;
-	bg: (name: "toolPendingBg" | "toolSuccessBg", text: string) => string;
+	bg: (name: ApplyPatchThemeBg, text: string) => string;
 	bold: (text: string) => string;
 	inverse: (text: string) => string;
 };

@@ -1,5 +1,35 @@
 # Core Extensions Changes
 
+## 2026-05-11 - GPT apply_patch OpenCode-style Diff Rendering
+
+### What changed
+
+- `builtin/gpt-apply-patch/preview-format.ts`: Reworked expanded patch previews to render OpenCode-like diff rows with colored signs, muted line numbers, added/removed row backgrounds, syntax highlighting when a TUI theme is available, and inverse inline word highlights for paired edits.
+- `builtin/gpt-apply-patch/types.ts`: Added `toolErrorBg` to the local theme background type used by apply_patch row rendering.
+- `test/suite/gpt-apply-patch-rich-render.test.ts`: Added regression coverage for row background colors and inline added/removed highlights.
+- `builtin/external-versions.json`: Bumped the vendored `pi-apply-patch` snapshot metadata to `0.1.1`.
+
+### Why
+
+- The previous rich preview only colored whole `+` / `-` lines and did not match OpenCode's edit/apply_patch diff visual hierarchy closely enough.
+
+### Why extension system couldn't handle this alone
+
+- `gpt-apply-patch` is already the builtin extension; the change is inside its own TUI render path.
+
+### Files modified
+
+- `builtin/gpt-apply-patch/preview-format.ts`
+- `builtin/gpt-apply-patch/types.ts`
+- `builtin/gpt-apply-patch/index.ts`
+- `builtin/external-versions.json`
+- `../../test/suite/gpt-apply-patch-rich-render.test.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `builtin/gpt-apply-patch/preview-format.ts` render helpers.
+- LOW: `builtin/gpt-apply-patch/types.ts` local theme background union.
+
 ## 2026-05-11 - GPT apply_patch External Path Support
 
 ### What changed
