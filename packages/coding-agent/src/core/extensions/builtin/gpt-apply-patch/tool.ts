@@ -4,6 +4,7 @@ import { defineTool } from "../../types.js";
 import { applyPatchDetailed, buildPartialFailureText } from "./apply.js";
 import { APPLY_PATCH_FREEFORM_DESCRIPTION, APPLY_PATCH_LARK_GRAMMAR, APPLY_PATCH_PARAMS } from "./constants.js";
 import { normalizeApplyPatchArguments } from "./params.js";
+import { parsePatch } from "./parser.js";
 import { createPendingPatchUpdate } from "./preview.js";
 import { getApplyPatchRenderState, renderPatchPreview } from "./preview-format.js";
 import { renderStreamingPatchCall } from "./streaming-render.js";
@@ -26,8 +27,10 @@ function renderPreviewBox(
 	const component = new Container();
 	if (!details.preview) return component;
 	const bgName = isPartial ? "toolPendingBg" : "toolSuccessBg";
+	const progress = details.progress;
+	const renderedTitle = progress ? `Applying patch (${progress.applied + progress.failed}/${progress.total})` : title;
 	const box = new Box(1, 1, (text: string) => theme.bg(bgName, text));
-	box.addChild(new Text(theme.fg("toolTitle", theme.bold(title)), 0, 0));
+	box.addChild(new Text(theme.fg("toolTitle", theme.bold(renderedTitle)), 0, 0));
 	box.addChild(new Spacer(1));
 	box.addChild(new Text(renderPatchPreview(details.preview, cwd, theme, expanded), 0, 0));
 	component.addChild(box);
@@ -69,9 +72,20 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 		): Promise<AgentToolResult<ApplyPatchToolDetails | undefined>> {
 			const normalizedParams = normalizeApplyPatchArguments(params);
 			if (!normalizedParams.input) throw new Error("input is required");
-			const pendingUpdate = await createPendingPatchUpdate(ctx.cwd, normalizedParams.input);
+			let totalOperations = 0;
+			try {
+				totalOperations = parsePatch(normalizedParams.input).length;
+			} catch {
+				// createPendingPatchUpdate keeps incomplete or invalid patch text renderable.
+			}
+			const initialProgress = totalOperations > 0 ? { applied: 0, failed: 0, total: totalOperations } : undefined;
+			const pendingUpdate = await createPendingPatchUpdate(ctx.cwd, normalizedParams.input, initialProgress);
 			onUpdate?.({ content: [{ type: "text", text: pendingUpdate.text }], details: pendingUpdate.details });
-			const result = await applyPatchDetailed(ctx.cwd, normalizedParams.input);
+			const preview = pendingUpdate.details?.preview;
+			const result = await applyPatchDetailed(ctx.cwd, normalizedParams.input, async (progress) => {
+				const progressUpdate = await createPendingPatchUpdate(ctx.cwd, normalizedParams.input, progress, preview);
+				onUpdate?.({ content: [{ type: "text", text: progressUpdate.text }], details: progressUpdate.details });
+			});
 			if (result.failures.length > 0) {
 				if (result.appliedFiles.length === 0) {
 					const firstFailure = result.failures[0];
@@ -81,7 +95,7 @@ export function createApplyPatchTool(): ApplyPatchToolDefinition {
 			}
 			return {
 				content: [{ type: "text", text: result.summaries.join("\n") }],
-				details: { ...pendingUpdate.details, result },
+				details: pendingUpdate.details?.preview ? { preview: pendingUpdate.details.preview, result } : { result },
 			};
 		},
 		renderCall(args, theme, context: ToolRenderContext<ApplyPatchRenderState, { input: string }>) {

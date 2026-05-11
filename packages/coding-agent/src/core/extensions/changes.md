@@ -1,5 +1,37 @@
 # Core Extensions Changes
 
+## 2026-05-11 - GPT apply_patch Realtime Progress Rendering
+
+### What changed
+
+- `builtin/gpt-apply-patch/types.ts`: Added progress metadata for partial apply_patch updates.
+- `builtin/gpt-apply-patch/apply.ts`: Added an optional progress callback emitted after each patch operation.
+- `builtin/gpt-apply-patch/preview.ts` and `tool.ts`: Render pending updates as `Applying patch (done/total)` while preserving rich diff previews.
+- `test/suite/gpt-apply-patch-extension.test.ts` and `gpt-apply-patch-rich-render.test.ts`: Added regression coverage for realtime progress updates and pending widget titles.
+
+### Why
+
+- Multi-file apply_patch calls previously showed a single pending diff preview and did not update the TUI as individual operations completed.
+
+### Why extension system couldn't handle this alone
+
+- `gpt-apply-patch` is already the builtin extension; progress has to be emitted from its apply loop and rendered by its tool result renderer.
+
+### Files modified
+
+- `builtin/gpt-apply-patch/types.ts`
+- `builtin/gpt-apply-patch/apply.ts`
+- `builtin/gpt-apply-patch/preview.ts`
+- `builtin/gpt-apply-patch/tool.ts`
+- `builtin/gpt-apply-patch/index.ts`
+- `../../test/suite/gpt-apply-patch-extension.test.ts`
+- `../../test/suite/gpt-apply-patch-rich-render.test.ts`
+
+### Expected merge conflict zones on next upstream sync
+
+- LOW: `builtin/gpt-apply-patch/apply.ts` apply loop callback wiring.
+- LOW: `builtin/gpt-apply-patch/tool.ts` pending update render title.
+
 ## 2026-05-11 - GPT apply_patch OpenCode-style Diff Rendering
 
 ### What changed

@@ -46,8 +46,17 @@ export type ApplyPatchPreview = {
 
 export type ApplyPatchToolDetails = {
 	preview?: ApplyPatchPreview;
+	progress?: ApplyPatchProgress;
 	result?: ApplyPatchResult;
 };
+
+export type ApplyPatchProgress = {
+	applied: number;
+	failed: number;
+	total: number;
+};
+
+export type ApplyPatchProgressCallback = (progress: ApplyPatchProgress) => Promise<void> | void;
 
 export type ApplyPatchFailure = {
 	filePath: string;

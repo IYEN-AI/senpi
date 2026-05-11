@@ -6,6 +6,7 @@ import { replaceChunks } from "./patch-replace.js";
 import { normalizePatchText } from "./text.js";
 import type {
 	ApplyPatchFailure,
+	ApplyPatchProgressCallback,
 	ApplyPatchRecoveryInstructions,
 	ApplyPatchResult,
 	AtomicWriteOperations,
@@ -118,7 +119,11 @@ function parseNonEmptyPatch(patchText: string): ParsedPatch[] {
 	return hunks;
 }
 
-export async function applyPatchDetailed(cwd: string, patchText: string): Promise<ApplyPatchResult> {
+export async function applyPatchDetailed(
+	cwd: string,
+	patchText: string,
+	onProgress?: ApplyPatchProgressCallback,
+): Promise<ApplyPatchResult> {
 	const hunks = parseNonEmptyPatch(patchText);
 	const summaries: string[] = [];
 	const appliedFiles: string[] = [];
@@ -135,6 +140,7 @@ export async function applyPatchDetailed(cwd: string, patchText: string): Promis
 			const message = error instanceof Error ? error.message : String(error);
 			failures.push({ filePath: hunk.filePath, operation: hunk.type, message });
 		}
+		await onProgress?.({ applied: appliedFiles.length, failed: failures.length, total: hunks.length });
 	}
 
 	const result: ApplyPatchResult = {

@@ -28,6 +28,8 @@ export type {
 	ApplyPatchFailure,
 	ApplyPatchParams,
 	ApplyPatchPreview,
+	ApplyPatchProgress,
+	ApplyPatchProgressCallback,
 	ApplyPatchRecoveryInstructions,
 	ApplyPatchRenderState,
 	ApplyPatchResult,

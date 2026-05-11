@@ -189,7 +189,7 @@ describe("gpt-apply-patch builtin extension", () => {
 			{ input: patch },
 			undefined,
 			(update) => {
-				pendingUpdate = update;
+				pendingUpdate ??= update;
 			},
 			{ cwd: harness.tempDir } as Parameters<typeof tool.execute>[4],
 		);
@@ -199,7 +199,7 @@ describe("gpt-apply-patch builtin extension", () => {
 		}
 
 		const firstText = pendingUpdate.content.find((block) => block.type === "text")?.text ?? "";
-		expect(firstText).toContain("Applying patch...\n• Edited 2 files (+2 -1)");
+		expect(firstText).toContain("Applying patch (0/2)...\n• Edited 2 files (+2 -1)");
 		expect(firstText).toContain("sample.txt (+1 -1)");
 		expect(firstText).toContain("-1 before");
 		expect(firstText).toContain("+1 after");
@@ -237,6 +237,44 @@ describe("gpt-apply-patch builtin extension", () => {
 		expect(rendered).toContain("sample.txt (+1 -1)");
 		expect(rendered).toContain("+1 after");
 		expect(rendered).not.toContain("Index:");
+	});
+
+	it("emits realtime progress updates while applying multiple patch operations", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		await writeFile(path.join(harness.tempDir, "first.txt"), "one\n", "utf-8");
+		await writeFile(path.join(harness.tempDir, "second.txt"), "two\n", "utf-8");
+		const patch = `*** Begin Patch
+*** Update File: first.txt
+@@
+-one
++ONE
+*** Update File: second.txt
+@@
+-two
++TWO
+*** End Patch`;
+		const tool = createApplyPatchTool();
+		const updates: ApplyPatchUpdate[] = [];
+
+		await tool.execute(
+			"call-progress",
+			{ input: patch },
+			undefined,
+			(update) => {
+				updates.push(update);
+			},
+			{ cwd: harness.tempDir } as Parameters<typeof tool.execute>[4],
+		);
+
+		expect(updates).toHaveLength(3);
+		expect(updates[0]?.details?.progress).toEqual({ applied: 0, failed: 0, total: 2 });
+		expect(updates[1]?.details?.progress).toEqual({ applied: 1, failed: 0, total: 2 });
+		expect(updates[2]?.details?.progress).toEqual({ applied: 2, failed: 0, total: 2 });
+		expect(updates[1]?.content.find((block) => block.type === "text")?.text).toContain("Applying patch (1/2)...");
+		expect(updates[2]?.content.find((block) => block.type === "text")?.text).toContain("Applying patch (2/2)...");
+		expect(await readFile(path.join(harness.tempDir, "first.txt"), "utf-8")).toBe("ONE\n");
+		expect(await readFile(path.join(harness.tempDir, "second.txt"), "utf-8")).toBe("TWO\n");
 	});
 
 	it("applies absolute and parent-escaping paths", async () => {

@@ -132,4 +132,41 @@ describe("gpt apply_patch rich TUI rendering", () => {
 		expect(rendered).toContain("<fg:toolDiffAdded>alpha <inverse>new</inverse></fg:toolDiffAdded>");
 		expect(rendered).toContain("<fg:toolDiffContext> </fg:toolDiffContext><fg:muted>2</fg:muted> same");
 	});
+
+	it("renders partial progress previews with realtime pending status", () => {
+		const tool = createApplyPatchTool();
+		const result = {
+			content: [{ type: "text" as const, text: "Applying patch (1/2)..." }],
+			details: {
+				progress: { applied: 1, failed: 0, total: 2 },
+				preview: {
+					files: [
+						{
+							filePath: "src/foo.ts",
+							operation: "update" as const,
+							diff: "-1 alpha old\n+1 alpha new",
+							added: 1,
+							removed: 1,
+						},
+					],
+					added: 1,
+					removed: 1,
+				},
+			},
+		};
+
+		const component = tool.renderResult?.(
+			result,
+			{ expanded: false, isPartial: true },
+			markerTheme as never,
+			createRenderContext("/workspace/project", { input: "" }, { executionStarted: true, argsComplete: true }),
+		);
+		const rendered = component?.render(200).join("\n") ?? "";
+
+		expect(rendered).toContain("<bg:toolPendingBg>");
+		expect(rendered).toContain("<bold>Applying patch (1/2)</bold>");
+		expect(rendered).toContain("• Edited src/foo.ts (+1 -1)");
+		expect(rendered).toContain("<fg:toolDiffRemoved>alpha <inverse>old</inverse></fg:toolDiffRemoved>");
+		expect(rendered).toContain("<fg:toolDiffAdded>alpha <inverse>new</inverse></fg:toolDiffAdded>");
+	});
 });

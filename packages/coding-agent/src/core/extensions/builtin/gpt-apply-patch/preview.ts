@@ -3,7 +3,13 @@ import { parsePatch } from "./parser.js";
 import { createPatchDiff } from "./patch-diff.js";
 import { replaceChunks } from "./patch-replace.js";
 import { formatPatchPreview, formatPendingPatchPaths } from "./preview-format.js";
-import type { ApplyPatchPreview, ApplyPatchPreviewFile, ApplyPatchToolDetails, ParsedPatch } from "./types.js";
+import type {
+	ApplyPatchPreview,
+	ApplyPatchPreviewFile,
+	ApplyPatchProgress,
+	ApplyPatchToolDetails,
+	ParsedPatch,
+} from "./types.js";
 import { resolvePatchPath } from "./workspace.js";
 
 async function readExistingFileForPreview(absolutePath: string): Promise<string> {
@@ -51,16 +57,31 @@ export async function createPatchPreview(cwd: string, hunks: ParsedPatch[]): Pro
 export async function createPendingPatchUpdate(
 	cwd: string,
 	patchText: string,
+	progress?: ApplyPatchProgress,
+	previewOverride?: ApplyPatchPreview,
 ): Promise<{ text: string; details: ApplyPatchToolDetails | undefined }> {
+	const title = progress
+		? `Applying patch (${progress.applied + progress.failed}/${progress.total})...`
+		: "Applying patch...";
+	if (previewOverride) {
+		return {
+			text: `${title}\n${formatPatchPreview(previewOverride)}`,
+			details: { preview: previewOverride, progress },
+		};
+	}
+
 	try {
 		const hunks = parsePatch(patchText);
-		if (hunks.length === 0) return { text: "Applying patch...", details: undefined };
+		if (hunks.length === 0) return { text: title, details: progress ? { progress } : undefined };
 		const preview = await createPatchPreview(cwd, hunks);
 		if (preview.files.some((file) => file.diff.trim().length > 0)) {
-			return { text: `Applying patch...\n${formatPatchPreview(preview)}`, details: { preview } };
+			return { text: `${title}\n${formatPatchPreview(preview)}`, details: { preview, progress } };
 		}
 	} catch {
-		return { text: formatPendingPatchPaths(patchText), details: undefined };
+		return {
+			text: progress ? title : formatPendingPatchPaths(patchText),
+			details: progress ? { progress } : undefined,
+		};
 	}
-	return { text: formatPendingPatchPaths(patchText), details: undefined };
+	return { text: progress ? title : formatPendingPatchPaths(patchText), details: progress ? { progress } : undefined };
 }
