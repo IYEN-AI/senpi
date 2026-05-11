@@ -1,5 +1,21 @@
 # AI Source Changes
 
+## 2026-05-11 - Senpi-branded Codex originator and User-Agent
+
+### What changed and why
+- `providers/openai-codex-responses.ts` `buildBaseCodexHeaders()`: changed the hardcoded `originator: "pi"` and the `User-Agent: "pi (…)"` string to `"senpi"`. Upstream chose `"pi"` as the Codex CLI identity; this fork's identity is `senpi`.
+- `utils/oauth/openai-codex.ts` `createAuthorizationFlow()`: changed the default `originator` parameter from `"pi"` to `"senpi"` and updated the JSDoc on `loginOpenAICodex` accordingly. Callers can still pass their own originator.
+
+### Files modified
+- `providers/openai-codex-responses.ts`
+- `utils/oauth/openai-codex.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+- The originator + User-Agent headers are built inside `pi-ai`'s Codex header constructor before the request leaves the library. Coding-agent extensions cannot intercept the header construction step.
+
+### Expected merge conflict zones
+- LOW: `buildBaseCodexHeaders()` body (3 lines) and the `originator` default parameter / JSDoc in `createAuthorizationFlow`.
+
 ## 2026-05-07 - Shared tool pair repair utility for compaction-safe histories
 
 ### What changed and why

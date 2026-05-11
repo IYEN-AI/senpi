@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Agent, type AgentMessage, type ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { type Api, type Message, type Model, streamSimple, supportsMax, supportsXhigh } from "@earendil-works/pi-ai";
-import { getAgentDir } from "../config.js";
+import { APP_NAME, getAgentDir } from "../config.js";
 import { AgentSession } from "./agent-session.js";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.js";
 import { AuthStorage } from "./auth-storage.js";
@@ -143,7 +143,7 @@ function getAttributionHeaders(
 	if (model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai")) {
 		return {
 			"HTTP-Referer": "https://pi.dev",
-			"X-OpenRouter-Title": "pi",
+			"X-OpenRouter-Title": APP_NAME,
 			"X-OpenRouter-Categories": "cli-agent",
 		};
 	}
@@ -155,7 +155,7 @@ function getAttributionHeaders(
 		model.baseUrl.includes("gateway.ai.cloudflare.com")
 	) {
 		return {
-			"User-Agent": "pi-coding-agent",
+			"User-Agent": `${APP_NAME}-coding-agent`,
 		};
 	}
 

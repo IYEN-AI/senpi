@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { APP_NAME } from "../../../../config.js";
 import {
 	AGENT_TYPE_ENV_VAR,
 	DEPTH_ENV_VAR,
@@ -24,7 +25,7 @@ export function getPiInvocation(args: string[]): { command: string; args: string
 		return { command: process.execPath, args };
 	}
 
-	return { command: "pi", args };
+	return { command: APP_NAME, args };
 }
 
 const trackedPids = new Set<number>();
