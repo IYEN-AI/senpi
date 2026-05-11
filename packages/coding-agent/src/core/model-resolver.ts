@@ -260,7 +260,7 @@ export async function resolveModelScope(
 	modelRegistry: ModelRegistry,
 	options?: { onWarning?: (message: string) => void },
 ): Promise<ScopedModel[]> {
-	const availableModels = await modelRegistry.getAvailable();
+	const availableModels = modelRegistry.getAvailable();
 	const scopedModels: ScopedModel[] = [];
 	const emitWarning = (message: string): void => {
 		if (options?.onWarning) {
@@ -555,7 +555,7 @@ export async function findInitialModel(options: {
 	}
 
 	// 4. Try first available model with valid API key
-	const availableModels = await modelRegistry.getAvailable();
+	const availableModels = modelRegistry.getAvailable();
 
 	if (availableModels.length > 0) {
 		// Try to find a default model from known providers
@@ -616,7 +616,7 @@ export async function restoreModelFromSession(
 	}
 
 	// Try to find any available model
-	const availableModels = await modelRegistry.getAvailable();
+	const availableModels = modelRegistry.getAvailable();
 
 	if (availableModels.length > 0) {
 		// Try to find a default model from known providers
