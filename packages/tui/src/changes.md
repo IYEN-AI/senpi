@@ -1,5 +1,22 @@
 # TUI delta rendering fork changes
 
+## 2026-05-11: insert-scroll fast path for expanded streaming output
+
+### What changed
+
+- In `packages/tui/src/tui.ts` `TUI.doRender()`, streaming inserts that move the viewport down while leaving a stable bottom suffix now use a scroll-region update for the changed viewport prefix, then paint only the newly inserted rows.
+- The fast path skips image rows and overlays, preserving the existing safer repaint paths for cases where terminal-owned image placement or overlay composition makes scroll-region edits risky.
+- In `packages/tui/test/tui-render.test.ts`, an expanded-output regression now asserts repeated appends avoid viewport/scrollback clears, keep DECSET 2026 balanced, preserve the final viewport, and avoid repainting stable tail rows every tick.
+
+### Why this cannot be expressed externally
+
+The decision depends on internal renderer state: previous and next viewport slices, line-count delta, stable suffix detection, image-line detection, hardware cursor bookkeeping, and synchronized terminal writes. Components and extensions can reduce churn, but cannot safely emit scroll-region edits or update `TUI`'s private viewport/cursor state.
+
+### Expected upstream conflict zone
+
+- `packages/tui/src/tui.ts` near the viewport remap and differential render branches in `doRender()`.
+- `packages/tui/test/tui-render.test.ts` in `TUI viewport remap for above-viewport growth`.
+
 ## 2026-05-10: viewport remap repaint fix for Ctrl-O expansion
 
 ### What changed

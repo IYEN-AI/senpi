@@ -65,6 +65,12 @@ export interface Component {
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
 type InputListener = (data: string) => InputListenerResult;
 
+interface ViewportInsertScrollPlan {
+	viewportTop: number;
+	regionBottom: number;
+	insertedRows: string[];
+}
+
 /**
  * Interface for components that can receive focus and display a hardware cursor.
  * When focused, the component should emit CURSOR_MARKER at the cursor position
@@ -871,6 +877,94 @@ export class TUI extends Container {
 		return this.deleteKittyImages(ids);
 	}
 
+	private getViewportRows(lines: string[], viewportTop: number, height: number): string[] {
+		return Array.from({ length: height }, (_, row) => lines[viewportTop + row] ?? "");
+	}
+
+	private createViewportInsertScrollPlan(
+		newLines: string[],
+		prevViewportTop: number,
+		height: number,
+		lineCountDelta: number,
+	): ViewportInsertScrollPlan | undefined {
+		if (lineCountDelta <= 0 || lineCountDelta >= height || this.overlayStack.length > 0) {
+			return undefined;
+		}
+
+		const maxViewportTop = Math.max(0, newLines.length - height);
+		const viewportTop = Math.min(maxViewportTop, prevViewportTop + lineCountDelta);
+		if (viewportTop <= prevViewportTop) {
+			return undefined;
+		}
+
+		const previousVisible = this.getViewportRows(this.previousLines, prevViewportTop, height);
+		const nextVisible = this.getViewportRows(newLines, viewportTop, height);
+		if (previousVisible.some(isImageLine) || nextVisible.some(isImageLine)) {
+			return undefined;
+		}
+
+		let stableSuffixRows = 0;
+		while (
+			stableSuffixRows < height &&
+			previousVisible[height - stableSuffixRows - 1] === nextVisible[height - stableSuffixRows - 1]
+		) {
+			stableSuffixRows += 1;
+		}
+
+		const regionHeight = height - stableSuffixRows;
+		if (regionHeight <= 0 || regionHeight < lineCountDelta) {
+			return undefined;
+		}
+
+		for (let row = 0; row < regionHeight - lineCountDelta; row++) {
+			if (previousVisible[row + lineCountDelta] !== nextVisible[row]) {
+				return undefined;
+			}
+		}
+
+		return {
+			viewportTop,
+			regionBottom: regionHeight - 1,
+			insertedRows: nextVisible.slice(regionHeight - lineCountDelta, regionHeight),
+		};
+	}
+
+	private renderViewportInsertScroll(
+		plan: ViewportInsertScrollPlan,
+		newLines: string[],
+		cursorPos: { row: number; col: number } | null,
+		width: number,
+		height: number,
+	): void {
+		let buffer = "\x1b[?2026h";
+		const regionTop = 0;
+		const regionBottom = plan.regionBottom;
+		buffer += `\x1b[${regionTop + 1};${regionBottom + 1}r`;
+		buffer += `\x1b[${regionBottom + 1};1H`;
+		buffer += "\n".repeat(plan.insertedRows.length);
+		buffer += "\x1b[r";
+
+		const firstInsertedScreenRow = regionBottom - plan.insertedRows.length + 1;
+		for (let index = 0; index < plan.insertedRows.length; index++) {
+			const screenRow = firstInsertedScreenRow + index;
+			buffer += `\x1b[${screenRow + 1};1H\x1b[2K`;
+			buffer += plan.insertedRows[index] ?? "";
+		}
+
+		buffer += "\x1b[?2026l";
+		this.terminal.write(buffer);
+
+		this.cursorRow = Math.max(0, newLines.length - 1);
+		this.hardwareCursorRow = plan.viewportTop + firstInsertedScreenRow + plan.insertedRows.length - 1;
+		this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+		this.previousViewportTop = plan.viewportTop;
+		this.positionHardwareCursor(cursorPos, newLines.length);
+		this.previousLines = newLines;
+		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+		this.previousWidth = width;
+		this.previousHeight = height;
+	}
+
 	/** Splice overlay content into a base line at a specific column. Single-pass optimized. */
 	private compositeLineAt(
 		baseLine: string,
@@ -1066,6 +1160,7 @@ export class TUI extends Container {
 			}
 		}
 		const appendedLines = newLines.length > this.previousLines.length;
+		const lineCountDelta = newLines.length - this.previousLines.length;
 		if (appendedLines) {
 			if (firstChanged === -1) {
 				firstChanged = this.previousLines.length;
@@ -1076,12 +1171,18 @@ export class TUI extends Container {
 			lastChanged = this.expandLastChangedForKittyImages(firstChanged, lastChanged);
 		}
 		const appendStart = appendedLines && firstChanged === this.previousLines.length && firstChanged > 0;
+		const insertScrollPlan = this.createViewportInsertScrollPlan(newLines, prevViewportTop, height, lineCountDelta);
 
 		// No changes - but still need to update hardware cursor position if it moved
 		if (firstChanged === -1) {
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousViewportTop = prevViewportTop;
 			this.previousHeight = height;
+			return;
+		}
+
+		if (insertScrollPlan) {
+			this.renderViewportInsertScroll(insertScrollPlan, newLines, cursorPos, width, height);
 			return;
 		}
 

@@ -48,6 +48,22 @@ class ExpandableTranscriptComponent implements Component {
 	invalidate(): void {}
 }
 
+class ExpandedStreamingOutputComponent implements Component {
+	private outputLineCount = 12;
+	readonly stableTail = ["loader row", "editor row", "footer row"];
+
+	appendOutputLine(): void {
+		this.outputLineCount += 1;
+	}
+
+	render(_width: number): string[] {
+		const output = Array.from({ length: this.outputLineCount }, (_, index) => `expanded output ${index}`);
+		return ["tool header", ...output, ...this.stableTail];
+	}
+
+	invalidate(): void {}
+}
+
 class LoggingVirtualTerminal extends VirtualTerminal {
 	private writes: string[] = [];
 
@@ -418,6 +434,47 @@ describe("TUI viewport remap for above-viewport growth", () => {
 
 		const viewport = terminal.getViewport();
 		assert.ok(viewport.join("\n").includes("tail row 5"), "Viewport should still show newest tail rows");
+
+		tui.stop();
+	});
+
+	it("does not repaint stable tail rows on every expanded streaming append", async () => {
+		const terminal = new LoggingVirtualTerminal(72, 6);
+		const tui = new TUI(terminal);
+		const component = new ExpandedStreamingOutputComponent();
+		tui.addChild(component);
+
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		for (let index = 0; index < 20; index++) {
+			component.appendOutputLine();
+			tui.requestRender();
+			await terminal.waitForRender();
+		}
+
+		const writes = terminal.getWrites();
+		const clearLineCount = countOccurrences(writes, "\x1b[2K");
+		assert.ok(!writes.includes("\x1b[2J"), "Expanded streaming appends should not clear the viewport");
+		assert.ok(!writes.includes("\x1b[3J"), "Expanded streaming appends should not clear scrollback");
+		assert.strictEqual(
+			countOccurrences(writes, "\x1b[?2026h"),
+			countOccurrences(writes, "\x1b[?2026l"),
+			"Expanded streaming appends should keep DECSET 2026 begin/end balanced",
+		);
+		assert.ok(
+			clearLineCount <= 25,
+			`Expanded streaming appends should draw only new rows, got ${clearLineCount} line clears`,
+		);
+		assert.deepStrictEqual(terminal.getViewport(), [
+			"expanded output 29",
+			"expanded output 30",
+			"expanded output 31",
+			"loader row",
+			"editor row",
+			"footer row",
+		]);
 
 		tui.stop();
 	});
