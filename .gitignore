@@ -4,6 +4,10 @@ dist/
 .DS_Store
 *.tsbuildinfo
 .sisyphus/
+
+# Generated model catalogs
+packages/ai/src/*.generated.ts
+
 # packages/*/node_modules/
 packages/*/dist/*
 # Keep only the bin-target stubs so pnpm/bun can create `node_modules/.bin`
