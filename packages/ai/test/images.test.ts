@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import { getImageModel } from "../src/image-models.js";
 import { generateImages } from "../src/images.js";
 import type { ImageContent, ImagesContext, ImagesModel, ProviderImagesOptions } from "../src/types.js";
+import { getLiveEnvApiKey, OPENROUTER_LIVE_TEST_FLAG } from "./live-api-gates.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 type ImagesOptionsWithExtras = ProviderImagesOptions & Record<string, unknown>;
+const openRouterApiKey = getLiveEnvApiKey("OPENROUTER_API_KEY", OPENROUTER_LIVE_TEST_FLAG);
 
 async function basicImageGeneration<TApi extends string>(model: ImagesModel<TApi>, options?: ImagesOptionsWithExtras) {
 	const context: ImagesContext = {
@@ -69,22 +71,19 @@ async function handleImageInput<TApi extends string>(model: ImagesModel<TApi>, o
 }
 
 describe("Images E2E Tests", () => {
-	describe.skipIf(!process.env.OPENROUTER_API_KEY)(
-		"OpenRouter Images Provider (google/gemini-2.5-flash-image)",
-		() => {
-			const model = getImageModel("openrouter", "google/gemini-2.5-flash-image");
+	describe.skipIf(!openRouterApiKey)("OpenRouter Images Provider (google/gemini-2.5-flash-image)", () => {
+		const model = getImageModel("openrouter", "google/gemini-2.5-flash-image");
 
-			it("should generate a basic image", { retry: 3 }, async () => {
-				await basicImageGeneration(model);
-			});
+		it("should generate a basic image", { retry: 3 }, async () => {
+			await basicImageGeneration(model);
+		});
 
-			it("should handle text plus image output", { retry: 3 }, async () => {
-				await handleTextAndImageOutput(model);
-			});
+		it("should handle text plus image output", { retry: 3 }, async () => {
+			await handleTextAndImageOutput(model);
+		});
 
-			it("should handle image input", { retry: 3 }, async () => {
-				await handleImageInput(model);
-			});
-		},
-	);
+		it("should handle image input", { retry: 3 }, async () => {
+			await handleImageInput(model);
+		});
+	});
 });

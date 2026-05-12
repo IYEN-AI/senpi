@@ -1,5 +1,38 @@
 # changes.md — ai
 
+## Explicit live API opt-in for ambient credentials (2026-05-12)
+
+### What changed
+
+- `test/live-api-gates.ts`: Added shared live-test gate helpers. Ambient provider keys and local model probes are ignored unless `PI_ENABLE_LIVE_API_TESTS=1` or the provider-specific flag is set.
+- `test/oauth.ts`: OAuth tokens from `~/.pi/agent/auth.json` now resolve only for explicitly enabled live OAuth test providers.
+- OpenRouter live suites in image, streaming, context-overflow, total-token, and thinking-disable tests now require `PI_ENABLE_OPENROUTER_LIVE=1` in addition to a key.
+- Local context-overflow suites now require `PI_ENABLE_LOCAL_LLM=1`, matching the existing fork policy that local model servers must be explicit opt-in.
+
+### Why
+
+- `npm test --workspaces --if-present` must pass in developer environments that contain stale or unrelated credentials and local model daemons. An invalid ambient `OPENROUTER_API_KEY`, stale Anthropic OAuth token, and empty LM Studio server caused live suites to run and fail for reasons unrelated to the code under test.
+
+### Why extension system couldn't handle this
+
+- These are `packages/ai` integration-test activation rules. Extension hooks are not involved in test discovery or live provider credential resolution.
+
+### Modified upstream files
+
+- `test/oauth.ts`
+- `test/context-overflow.test.ts`
+- `test/google-thinking-disable.test.ts`
+- `test/image-tool-result.test.ts`
+- `test/images.test.ts`
+- `test/live-api-gates.test.ts`
+- `test/live-api-gates.ts`
+- `test/stream.test.ts`
+- `test/total-tokens.test.ts`
+
+### Expected merge conflict zones
+
+- Upstream currently gates many live suites directly on credential presence. Rebase conflicts are likely in any live provider test that changes `describe.skipIf(!process.env.<KEY>)` conditions or OAuth token bootstrapping.
+
 ## Live API test gating fixes (2026-04-09)
 
 ### What changed

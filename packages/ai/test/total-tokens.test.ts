@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { complete } from "../src/stream.js";
 import type { Api, Context, Model, StreamOptions, Usage } from "../src/types.js";
+import { getLiveEnvApiKey, OPENROUTER_LIVE_TEST_FLAG } from "./live-api-gates.js";
 
 type StreamOptionsWithExtras = StreamOptions & Record<string, unknown>;
 
@@ -31,6 +32,7 @@ const oauthTokens = await Promise.all([
 	resolveApiKey("openai-codex"),
 ]);
 const [anthropicOAuthToken, githubCopilotToken, openaiCodexToken] = oauthTokens;
+const openRouterApiKey = getLiveEnvApiKey("OPENROUTER_API_KEY", OPENROUTER_LIVE_TEST_FLAG);
 
 // Generate a long system prompt to trigger caching (>2k bytes for most providers)
 const LONG_SYSTEM_PROMPT = `You are a helpful assistant. Be concise in your responses.
@@ -613,7 +615,7 @@ describe("totalTokens field", () => {
 	// OpenRouter - Multiple backend providers
 	// =========================================================================
 
-	describe.skipIf(!process.env.OPENROUTER_API_KEY)("OpenRouter", () => {
+	describe.skipIf(!openRouterApiKey)("OpenRouter", () => {
 		it(
 			"anthropic/claude-sonnet-4 - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
@@ -621,7 +623,7 @@ describe("totalTokens field", () => {
 				const llm = getModel("openrouter", "anthropic/claude-sonnet-4");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openRouterApiKey });
 
 				logUsage("First request", first);
 				logUsage("Second request", second);
@@ -638,7 +640,7 @@ describe("totalTokens field", () => {
 				const llm = getModel("openrouter", "deepseek/deepseek-chat");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openRouterApiKey });
 
 				logUsage("First request", first);
 				logUsage("Second request", second);
@@ -655,7 +657,7 @@ describe("totalTokens field", () => {
 				const llm = getModel("openrouter", "mistralai/mistral-small-3.2-24b-instruct");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openRouterApiKey });
 
 				logUsage("First request", first);
 				logUsage("Second request", second);
@@ -672,7 +674,7 @@ describe("totalTokens field", () => {
 				const llm = getModel("openrouter", "google/gemini-2.0-flash-001");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openRouterApiKey });
 
 				logUsage("First request", first);
 				logUsage("Second request", second);
@@ -689,7 +691,7 @@ describe("totalTokens field", () => {
 				const llm = getModel("openrouter", "meta-llama/llama-4-scout");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openRouterApiKey });
 
 				logUsage("First request", first);
 				logUsage("Second request", second);

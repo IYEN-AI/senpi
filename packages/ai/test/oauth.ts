@@ -10,6 +10,7 @@ import { homedir } from "os";
 import { dirname, join } from "path";
 import { getOAuthApiKey } from "../src/utils/oauth/index.js";
 import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types.js";
+import { isOAuthLiveApiTestEnabled } from "./live-api-gates.js";
 
 const AUTH_PATH = join(homedir(), ".pi", "agent", "auth.json");
 
@@ -55,6 +56,8 @@ function saveAuthStorage(storage: AuthStorage): void {
  *
  */
 export async function resolveApiKey(provider: string): Promise<string | undefined> {
+	if (!isOAuthLiveApiTestEnabled(provider)) return undefined;
+
 	const storage = loadAuthStorage();
 	const entry = storage[provider];
 
