@@ -72,6 +72,7 @@ You do **not** need to install these sibling packages for normal senpi use; thei
 | [`../pi-extensions/pi-openai-api-parallel-tool-calls`](../pi-extensions/pi-openai-api-parallel-tool-calls) | OpenAI `parallel_tool_calls` payload support. |
 | [`../pi-extensions/pi-openai-code-interpreter`](../pi-extensions/pi-openai-code-interpreter) | OpenAI Code Interpreter. |
 | [`../pi-extensions/pi-openai-web-search`](../pi-extensions/pi-openai-web-search) | OpenAI-native web search. |
+| [`../pi-extensions/pi-todotools`](../pi-extensions/pi-todotools) | `todowrite` / `todoread`, todo sidebar state, workflow prompt guidance, and continuation follow-ups. |
 
 ## Why "senpi"
 
@@ -103,7 +104,7 @@ In-tree, tightly coupled to senpi internals. Loaded in this exact registration o
 | 2 | [`permission-system`](packages/coding-agent/src/core/extensions/builtin/permission-system/) | Full opencode-style permission port — rules, JSONL storage, TUI prompts, parser-aware patterns (bash arity, file globs, `apply_patch` body paths), non-interactive fallback | [AGENTS.md](packages/coding-agent/src/core/extensions/builtin/permission-system/AGENTS.md) · [changes.md](packages/coding-agent/src/core/extensions/builtin/permission-system/changes.md) |
 | 3 | [`gpt-apply-patch`](packages/coding-agent/src/core/extensions/builtin/gpt-apply-patch/) *(vendored)* | When the active model is OpenAI GPT, swaps `write`/`edit` for Codex-style freeform `apply_patch` with a Lark grammar. Synced from [`code-yeongyu/pi-apply-patch`](https://github.com/code-yeongyu/pi-apply-patch). | [AGENTS.md](packages/coding-agent/src/core/extensions/builtin/gpt-apply-patch/AGENTS.md) |
 | 4 | [`prompt-preset`](packages/coding-agent/src/core/extensions/builtin/prompt-preset/) | Per-model system prompt presets (gpt-5.x, claude-opus-4-{5,6,7}, kimi-k2-6) layered on top of the dynamic prompt. Shared codex-style file-operations tuning. | [AGENTS.md](packages/coding-agent/src/core/extensions/builtin/prompt-preset/AGENTS.md) · [changes.md](packages/coding-agent/src/core/extensions/builtin/prompt-preset/changes.md) |
-| 5 | [`todowrite`](packages/coding-agent/src/core/extensions/builtin/todotools/) | `todowrite` / `todoread` tools with branch-aware persistence, sidebar widget, and a continuation loop that nudges the model to keep working | — |
+| 5 | [`todowrite`](packages/coding-agent/src/core/extensions/builtin/todotools/) *(vendored)* | `todowrite` / `todoread` tools with branch-aware persistence, sidebar widget, workflow prompt guidance, and a continuation loop. Synced from [`code-yeongyu/pi-todotools`](https://github.com/code-yeongyu/pi-todotools). | — |
 | 6 | [`redraws`](packages/coding-agent/src/core/extensions/builtin/redraws.ts) | `/tui` command reporting cumulative TUI full-redraw count. Used for differential-rendering debugging. | — |
 | 7 | [`anthropic-web-search`](packages/coding-agent/src/core/extensions/builtin/anthropic-web-search/) | Anthropic native `web_search` tool | — |
 | 8 | [`anthropic-tool-search`](packages/coding-agent/src/core/extensions/builtin/anthropic-tool-search/) | Anthropic native `tool_search` tool | — |
@@ -122,7 +123,7 @@ In-tree, tightly coupled to senpi internals. Loaded in this exact registration o
 | 21 | [`tool-pair-guard`](packages/coding-agent/src/core/extensions/builtin/tool-pair-guard/) | Sanitizes Anthropic request payloads by removing orphan `tool_result` blocks — compaction safety | — |
 | 22 | [`compaction`](packages/coding-agent/src/core/extensions/builtin/compaction/) | Speculative + emergency compaction policy: degradation monitor, circuit breaker, per-turn cap, todo bridging, checkpoint state, restoration tracker, tool-result truncation | [AGENTS.md](packages/coding-agent/src/core/extensions/builtin/compaction/AGENTS.md) · [changes.md](packages/coding-agent/src/core/extensions/builtin/compaction/changes.md) |
 
-> **All 20 directories** above are new vs upstream `pi-mono` — none exist in `badlogic/pi-mono`. Vendored versions are pinned in [`external-versions.json`](packages/coding-agent/src/core/extensions/builtin/external-versions.json) and synced from the sibling `pi-extensions` checkout at build time via [`sync-builtin-extensions.mjs`](packages/coding-agent/scripts/sync-builtin-extensions.mjs).
+> The builtin directories above are new vs upstream `pi-mono` — none exist in `badlogic/pi-mono`. Vendored versions are pinned in [`external-versions.json`](packages/coding-agent/src/core/extensions/builtin/external-versions.json) and synced from the sibling `pi-extensions` checkout with [`sync-builtin-extensions.mjs`](packages/coding-agent/scripts/sync-builtin-extensions.mjs).
 
 Agent-profile tool filtering is no longer an owned builtin. Install `pi-agent-system` from `../pi-extensions/pi-agent-system` (or GitHub `code-yeongyu/pi-agent-system`) when named sub-agent profiles are wanted.
 

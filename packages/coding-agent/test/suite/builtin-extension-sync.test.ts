@@ -19,5 +19,7 @@ describe("synced builtin extensions", () => {
 		expect(manifest.extensions?.["openai-api-parallel-tool-calls"]?.version).toBe("0.1.0");
 		expect(manifest.extensions?.["bash-timeout"]?.packageName).toBe("pi-bash-timeout");
 		expect(manifest.extensions?.["bash-timeout"]?.version).toBe("0.1.0");
+		expect(manifest.extensions?.todowrite?.packageName).toBe("pi-todotools");
+		expect(manifest.extensions?.todowrite?.version).toBe("0.1.0");
 	});
 });

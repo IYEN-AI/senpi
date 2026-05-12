@@ -1,5 +1,27 @@
 # Core Extensions Changes
 
+## 2026-05-12 - Externalize todotools vendored builtin source
+
+### What changed
+
+- Added `pi-todotools` to the vendored builtin sync manifest and `sync-builtin-extensions.mjs` mapping.
+- Refreshed `builtin/todotools/` from the standalone `../pi-extensions/pi-todotools` source while preserving the `todowrite` builtin id and tool names.
+- Added local `todotools/settings.ts` and `todotools/system-messages.ts` helpers so the extracted extension uses only public package APIs externally.
+- Updated sync coverage to pin the `pi-todotools` package version.
+
+### Why
+
+- Todo tools are now maintained as a public sibling extension like other vendored builtins, while senpi continues shipping the feature in the binary.
+
+### Why extension system couldn't handle this alone
+
+- senpi's builtin list is assembled by core resource loading; shipping a sibling extension as a builtin still requires vendored source and the builtin sync manifest.
+
+### Expected merge conflict zones
+
+- `builtin/todotools/` if upstream adds its own todo tooling.
+- `builtin/external-versions.json` and `scripts/sync-builtin-extensions.mjs` if more vendored packages are added.
+
 ## 2026-05-11 - GPT apply_patch Realtime Progress Rendering
 
 ### What changed

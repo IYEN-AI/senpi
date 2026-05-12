@@ -9,7 +9,7 @@ function getLatestTodos(ctx: ExtensionContext): TodoItem[] {
 	return getLatestTodosFromBranchEntries(ctx.sessionManager.getBranch());
 }
 
-export default function todowriteExtension(pi: ExtensionAPI): void {
+export default function todotoolsExtension(pi: ExtensionAPI): void {
 	let currentTodos: TodoItem[] = [];
 
 	const getCurrentTodos = (): TodoItem[] => currentTodos;
@@ -53,6 +53,8 @@ export {
 	getTodoMarker,
 	getTodoResultLines,
 	getTodoWidgetLines,
+	isIncompleteTodo,
+	isTerminalTodoStatus,
 	isTodoItem,
 	isTodoItemArray,
 	sanitizeTodoText,

@@ -1,8 +1,8 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { SettingsManager } from "../../../../settings-manager.js";
 import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../../types.js";
-import { emitBuiltinSystemMessageFailure, sendBuiltinUserMessage } from "../../system-messages.js";
+import { readTodoSettings } from "../settings.js";
 import type { TodoItem } from "../state.js";
+import { emitTodoSystemMessageFailure, sendTodoUserMessage } from "../system-messages.js";
 import { resolveContinuationConfig } from "./config.js";
 import { buildContinuationPrompt, CONTINUATION_DIRECTIVE, countIncomplete } from "./prompt.js";
 
@@ -79,8 +79,6 @@ function getSessionId(ctx: ExtensionContext): string {
 }
 
 function isNonInteractiveContext(ctx: ExtensionContext): boolean {
-	// ExtensionContext does not expose a dedicated mode flag. The documented
-	// signal for print/RPC mode is `hasUI === false`.
 	return !ctx.hasUI;
 }
 
@@ -91,10 +89,9 @@ function shouldResetForSessionStart(event: SessionStartEvent): boolean {
 
 function reportContinuationError(pi: ExtensionAPI, ctx: ExtensionContext, error: unknown, prompt?: string): void {
 	const message = error instanceof Error ? error.message : String(error);
-	emitBuiltinSystemMessageFailure(pi, {
+	emitTodoSystemMessageFailure(pi, {
 		route: "todotools.continuation",
 		sessionId: getSessionId(ctx),
-		kind: "user_message",
 		content: prompt ?? "",
 		errorMessage: message,
 	});
@@ -137,7 +134,7 @@ async function dispatchContinuationWhenIdle(
 				return;
 			}
 
-			sendBuiltinUserMessage(pi, "todotools.continuation", prompt, {
+			sendTodoUserMessage(pi, "todotools.continuation", prompt, {
 				sessionId: getSessionId(ctx),
 			});
 			return;
@@ -203,10 +200,10 @@ export function installContinuation(pi: ExtensionAPI, deps: ContinuationDeps): v
 				return;
 			}
 
-			const settingsManager = SettingsManager.create(ctx.cwd);
+			const settings = readTodoSettings(ctx.cwd);
 			const config = resolveContinuationConfig({
-				globalSettings: settingsManager.getGlobalSettings() as Record<string, unknown>,
-				projectSettings: settingsManager.getProjectSettings() as Record<string, unknown>,
+				globalSettings: settings.globalSettings,
+				projectSettings: settings.projectSettings,
 				cliFlag: pi.getFlag("disable-todo-continuation"),
 			});
 			if (!config.enabled) {

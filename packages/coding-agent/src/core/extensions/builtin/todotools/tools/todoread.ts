@@ -29,7 +29,9 @@ export function registerTodoReadTool(pi: ExtensionAPI, getCurrentTodos: () => To
 		renderResult(result, _options, theme) {
 			const details = result.details as TodoWriteDetails | undefined;
 			const todos = details?.todos ?? getCurrentTodos();
-			const [title, ...items] = getTodoResultLines(todos);
+			const lines = getTodoResultLines(todos);
+			const title = lines[0] ?? "0 todos";
+			const items = lines.slice(1);
 			const body = items.length > 0 ? `\n${items.join("\n")}` : "";
 			return new Text(`${theme.fg("muted", title)}${body}`, 0, 0);
 		},

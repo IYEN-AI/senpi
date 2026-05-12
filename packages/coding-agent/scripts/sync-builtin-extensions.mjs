@@ -48,12 +48,78 @@ const FILES = [
 					'import type { Model } from "@earendil-works/pi-ai";\nimport { Type } from "typebox";\nimport type { AgentToolResult } from "../../types.js";\nimport { defineTool, type ExtensionAPI, type ToolDefinition } from "../../types.js";',
 				),
 	},
+	{
+		source: "pi-todotools/src/index.ts",
+		target: "todotools/index.ts",
+		transform: (content) =>
+			content.replace(
+				'import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";',
+				'import type { ExtensionAPI, ExtensionContext } from "../../types.js";',
+			),
+	},
+	{ source: "pi-todotools/src/prompt.ts", target: "todotools/prompt.ts" },
+	{ source: "pi-todotools/src/settings.ts", target: "todotools/settings.ts" },
+	{ source: "pi-todotools/src/state.ts", target: "todotools/state.ts" },
+	{
+		source: "pi-todotools/src/system-messages.ts",
+		target: "todotools/system-messages.ts",
+		transform: (content) =>
+			content
+				.replace(
+					'import type { ImageContent, TextContent } from "@mariozechner/pi-ai";',
+					'import type { ImageContent, TextContent } from "@earendil-works/pi-ai";',
+				)
+				.replace(
+					'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";',
+					'import type { ExtensionAPI } from "../../types.js";',
+				),
+	},
+	{ source: "pi-todotools/src/continuation/config.ts", target: "todotools/continuation/config.ts" },
+	{ source: "pi-todotools/src/continuation/index.ts", target: "todotools/continuation/index.ts" },
+	{ source: "pi-todotools/src/continuation/prompt.ts", target: "todotools/continuation/prompt.ts" },
+	{
+		source: "pi-todotools/src/continuation/runtime.ts",
+		target: "todotools/continuation/runtime.ts",
+		transform: (content) =>
+			content
+				.replace(
+					'import type { AssistantMessage } from "@mariozechner/pi-ai";',
+					'import type { AssistantMessage } from "@earendil-works/pi-ai";',
+				)
+				.replace(
+					'import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "@mariozechner/pi-coding-agent";',
+					'import type { ExtensionAPI, ExtensionContext, SessionStartEvent } from "../../../types.js";',
+				),
+	},
+	{
+		source: "pi-todotools/src/tools/todoread.ts",
+		target: "todotools/tools/todoread.ts",
+		transform: (content) =>
+			content
+				.replace(
+					'import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";',
+					'import type { ExtensionAPI } from "../../../types.js";',
+				)
+				.replace('import { Text } from "@mariozechner/pi-tui";', 'import { Text } from "@earendil-works/pi-tui";'),
+	},
+	{
+		source: "pi-todotools/src/tools/todowrite.ts",
+		target: "todotools/tools/todowrite.ts",
+		transform: (content) =>
+			content
+				.replace(
+					'import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";',
+					'import type { ExtensionAPI, ExtensionContext } from "../../../types.js";',
+				)
+				.replace('import { Text } from "@mariozechner/pi-tui";', 'import { Text } from "@earendil-works/pi-tui";'),
+	},
 ];
 
 const PACKAGES = [
 	{ id: "openai-api-parallel-tool-calls", packageDir: "pi-openai-api-parallel-tool-calls" },
 	{ id: "bash-timeout", packageDir: "pi-bash-timeout" },
 	{ id: "gpt-apply-patch", packageDir: "pi-apply-patch" },
+	{ id: "todowrite", packageDir: "pi-todotools" },
 ];
 
 function readPackageMetadata(packageName) {

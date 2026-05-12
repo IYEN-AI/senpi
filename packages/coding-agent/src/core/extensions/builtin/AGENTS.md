@@ -1,6 +1,6 @@
 # packages/coding-agent/src/core/extensions/builtin
 
-23 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
+22 in-tree extensions. Each is the canonical answer to "can senpi do X without core changes?". Registration order matters.
 
 ## INVENTORY (registration order from `builtin/index.ts`)
 
@@ -10,7 +10,7 @@
 | 2 | `permission-system` | `permission-system/` | Full opencode-style permission port: rules, JSONL storage, prompts |
 | 3 | `gpt-apply-patch` | `gpt-apply-patch/` | Codex-style `apply_patch` tool with rich render + freeform grammar |
 | 4 | `prompt-preset` | `prompt-preset/` | Per-model system prompts (gpt-5.x, claude-opus-4-{5,6,7}, kimi-k2-6) |
-| 5 | `todowrite` | `todotools/` | Plan/task tools + continuation chain |
+| 5 | `todowrite` | `todotools/` | Plan/task tools + continuation chain; synced from `../pi-extensions/pi-todotools` |
 | 6 | `redraws` | `redraws.ts` | Force-redraw event hooks for stable streaming visuals |
 | 7 | `anthropic-web-search` | `anthropic-web-search/` | Anthropic-native web search tool |
 | 8 | `anthropic-tool-search` | `anthropic-tool-search/` | Anthropic-native tool-search tool |
@@ -46,7 +46,7 @@ Plus 4 **global default extensions** (resolved fast-path): `diff`, `files`, `pro
 - **`prompt-preset/`** has per-model files (`gpt-5.5.ts`, `claude-opus-4-7.ts`, …) and a shared `file-operations.ts` tuning block. New model = new preset file + entry in `presets.ts`.
 - **`permission-system/` is a full port** of opencode's permission flow. Agent-profile filtering now lives in the external `pi-agent-system` repository.
 - **`compaction/`** is policy-rich (`policy.ts`, `speculative.ts`, `restoration-tracker.ts`, `circuit-breaker.ts`, `degradation-monitor.ts`, `per-turn-cap.ts`, `tool-truncation.ts`, `checkpoint-state.ts`, `overflow-detection.ts`, `state.ts`, `todo-bridge.ts`). Touch only with policy tests in lock-step.
-- **External versions**: `external-versions.json` pins versions of upstream-equivalent deps; `prepublishOnly` may sync this.
+- **External versions**: `external-versions.json` pins versions of sibling `../pi-extensions` packages used as vendored builtins; refresh with `packages/coding-agent/scripts/sync-builtin-extensions.mjs`.
 
 ## ANTI-PATTERNS
 

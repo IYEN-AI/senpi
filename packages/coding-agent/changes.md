@@ -1,5 +1,15 @@
 # Local fork changes
 
+## 2026-05-12 — add pi-todotools to builtin sync
+
+- Changed:
+  - `packages/coding-agent/scripts/sync-builtin-extensions.mjs`
+  - `packages/coding-agent/src/core/extensions/builtin/external-versions.json`
+  - `README.md`
+- Why: The todo tools now live in the public sibling `../pi-extensions/pi-todotools` repository, but senpi should continue to ship them as a builtin.
+- What changed: Added sync mappings and documentation for the vendored `todowrite` builtin source.
+- Merge-conflict risk: low. Expected conflict zones are the builtin sync file list, external version manifest, and README builtin tables.
+
 ## 2026-04-05 — add `sanepi` CLI alias
 
 - Changed: `packages/coding-agent/package.json`
