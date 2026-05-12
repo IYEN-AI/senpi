@@ -659,6 +659,148 @@ export default function(pi: ExtensionAPI) {
 			expect(errors.some((e) => e.error.includes("duplicate-tool") && e.error.includes("conflicts"))).toBe(true);
 		});
 
+		it("should dedupe repeated package extensions by package name before conflict detection", async () => {
+			const firstDir = join(tempDir, "first-package");
+			const secondDir = join(tempDir, "second-package");
+			mkdirSync(firstDir, { recursive: true });
+			mkdirSync(secondDir, { recursive: true });
+			writeFileSync(join(firstDir, "package.json"), JSON.stringify({ name: "same-pi-extension" }));
+			writeFileSync(join(secondDir, "package.json"), JSON.stringify({ name: "same-pi-extension" }));
+
+			const extensionSource = (description: string) => `
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+export default function(pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "same-package-tool",
+    description: ${JSON.stringify(description)},
+    parameters: Type.Object({}),
+    execute: async () => ({ result: ${JSON.stringify(description)} }),
+  });
+}`;
+			const firstPath = join(firstDir, "index.ts");
+			const secondPath = join(secondDir, "index.ts");
+			writeFileSync(firstPath, extensionSource("first package tool"));
+			writeFileSync(secondPath, extensionSource("second package tool"));
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir, additionalExtensionPaths: [firstPath, secondPath] });
+			await loader.reload();
+
+			const extensionsResult = loader.getExtensions();
+			expect(extensionsResult.errors.some((e) => e.error.includes("same-package-tool"))).toBe(false);
+			expect(
+				extensionsResult.extensions.filter(
+					(extension) => extension.path === firstPath || extension.path === secondPath,
+				),
+			).toHaveLength(1);
+		});
+
+		it("should dedupe the same git package when it is also cloned into user extensions", async () => {
+			const packageName = "pi-ast-grep";
+			const gitPackageDir = join(agentDir, "git", "github.com", "code-yeongyu", packageName);
+			const clonedExtensionDir = join(agentDir, "extensions", packageName);
+			const packageJson = JSON.stringify({ name: packageName, pi: { extensions: ["./src/index.ts"] } });
+			const extensionSource = `
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+export default function(pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "ast_grep_search",
+    description: "AST grep search",
+    parameters: Type.Object({}),
+    execute: async () => ({ result: "search" }),
+  });
+}`;
+
+			for (const packageDir of [gitPackageDir, clonedExtensionDir]) {
+				mkdirSync(join(packageDir, "src"), { recursive: true });
+				writeFileSync(join(packageDir, "package.json"), packageJson);
+				writeFileSync(join(packageDir, "src", "index.ts"), extensionSource);
+			}
+
+			const settingsManager = SettingsManager.inMemory({ packages: [`git:github.com/code-yeongyu/${packageName}`] });
+			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+			await loader.reload();
+
+			const extensionsResult = loader.getExtensions();
+			const duplicatePaths = [join(gitPackageDir, "src", "index.ts"), join(clonedExtensionDir, "src", "index.ts")];
+			expect(extensionsResult.errors.some((error) => error.error.includes('Tool "ast_grep_search" conflicts'))).toBe(
+				false,
+			);
+			expect(
+				extensionsResult.extensions.filter((extension) => duplicatePaths.includes(extension.path)),
+			).toHaveLength(1);
+		});
+
+		it("should keep distinct extension entries from the same package", async () => {
+			const packageDir = join(tempDir, "multi-extension-package");
+			const extensionsDir = join(packageDir, "extensions");
+			mkdirSync(extensionsDir, { recursive: true });
+			writeFileSync(join(packageDir, "package.json"), JSON.stringify({ name: "multi-extension-package" }));
+
+			const extensionSource = (toolName: string) => `
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+export default function(pi: ExtensionAPI) {
+  pi.registerTool({
+    name: ${JSON.stringify(toolName)},
+    description: ${JSON.stringify(toolName)},
+    parameters: Type.Object({}),
+    execute: async () => ({ result: ${JSON.stringify(toolName)} }),
+  });
+}`;
+			const firstPath = join(extensionsDir, "first.ts");
+			const secondPath = join(extensionsDir, "second.ts");
+			writeFileSync(firstPath, extensionSource("first-package-tool"));
+			writeFileSync(secondPath, extensionSource("second-package-tool"));
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir, additionalExtensionPaths: [firstPath, secondPath] });
+			await loader.reload();
+
+			const extensionPaths = loader.getExtensions().extensions.map((extension) => extension.path);
+			expect(extensionPaths).toContain(firstPath);
+			expect(extensionPaths).toContain(secondPath);
+		});
+
+		it("should suppress builtin tool conflicts because load order handles precedence", async () => {
+			const externalExtDir = join(agentDir, "extensions", "external-apply-patch");
+			mkdirSync(externalExtDir, { recursive: true });
+			writeFileSync(
+				join(externalExtDir, "index.ts"),
+				`
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+export default function(pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "apply_patch",
+    description: "External apply patch",
+    parameters: Type.Object({}),
+    execute: async () => ({ result: "external" }),
+  });
+}`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { errors } = loader.getExtensions();
+			expect(errors.some((error) => error.error.includes('Tool "apply_patch" conflicts'))).toBe(false);
+
+			const extensionsResult = loader.getExtensions();
+			const sessionManager = SessionManager.inMemory();
+			const authStorage = AuthStorage.create(join(tempDir, "auth-builtin-conflict.json"));
+			const modelRegistry = ModelRegistry.create(authStorage);
+			const runner = new ExtensionRunner(
+				extensionsResult.extensions,
+				extensionsResult.runtime,
+				cwd,
+				sessionManager,
+				modelRegistry,
+			);
+
+			expect(runner.getToolDefinition("apply_patch")?.description).not.toBe("External apply patch");
+		});
+
 		it("should prefer explicit CLI extensions over discovered extensions when commands and tools conflict", async () => {
 			const globalExtDir = join(agentDir, "extensions");
 			mkdirSync(globalExtDir, { recursive: true });
@@ -710,7 +852,10 @@ export default function(pi: ExtensionAPI) {
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions[0]?.path).toBe(explicitExtPath);
+			const diskExtensions = extensionsResult.extensions.filter(
+				(extension) => !extension.path.startsWith("<builtin:"),
+			);
+			expect(diskExtensions[0]?.path).toBe(explicitExtPath);
 
 			const sessionManager = SessionManager.inMemory();
 			const authStorage = AuthStorage.create(join(tempDir, "auth-explicit.json"));

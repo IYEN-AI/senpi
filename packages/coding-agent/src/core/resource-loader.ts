@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import chalk from "chalk";
 import { CONFIG_DIR_NAME, getAgentDir, getPackageDir } from "../config.js";
@@ -446,12 +446,15 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const extensionPaths = this.noExtensions
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
+		const dedupedExtensionPaths = this.dedupeExtensionPathsByPackageName(extensionPaths);
 
 		const factoryResolver: ExtensionFactoryResolver = (_extensionPath, resolvedPath) =>
 			resolveGeneratedGlobalDefaultExtensionFactory(resolvedPath, this.agentDir);
-		const extensionsResult = await loadExtensions(extensionPaths, this.cwd, this.eventBus, { factoryResolver });
+		const extensionsResult = await loadExtensions(dedupedExtensionPaths, this.cwd, this.eventBus, {
+			factoryResolver,
+		});
 		const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);
-		extensionsResult.extensions.push(...inlineExtensions.extensions);
+		extensionsResult.extensions.unshift(...inlineExtensions.extensions);
 		extensionsResult.errors.push(...inlineExtensions.errors);
 
 		// Detect extension conflicts (tools, commands, flags with same names from different extensions)
@@ -753,6 +756,64 @@ export class DefaultResourceLoader implements ResourceLoader {
 		return resolve(this.cwd, expanded);
 	}
 
+	private findNearestPackageIdentity(resourcePath: string): { key: string; packageName: string } | undefined {
+		if (resourcePath.startsWith("<")) {
+			return undefined;
+		}
+
+		const normalizedResourcePath = resolve(resourcePath);
+		let currentPath = resolve(resourcePath);
+		try {
+			if (!statSync(currentPath).isDirectory()) {
+				currentPath = resolve(currentPath, "..");
+			}
+		} catch {
+			currentPath = resolve(currentPath, "..");
+		}
+
+		while (true) {
+			const packageJsonPath = join(currentPath, "package.json");
+			if (existsSync(packageJsonPath)) {
+				try {
+					const packageJson: { name?: unknown } = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+					if (typeof packageJson.name !== "string" || packageJson.name.length === 0) {
+						return undefined;
+					}
+					return {
+						key: `${packageJson.name}:${relative(currentPath, normalizedResourcePath)}`,
+						packageName: packageJson.name,
+					};
+				} catch {
+					return undefined;
+				}
+			}
+
+			const parentPath = resolve(currentPath, "..");
+			if (parentPath === currentPath) {
+				return undefined;
+			}
+			currentPath = parentPath;
+		}
+	}
+
+	private dedupeExtensionPathsByPackageName(extensionPaths: string[]): string[] {
+		const dedupedPaths: string[] = [];
+		const seenPackageNames = new Set<string>();
+
+		for (const extensionPath of extensionPaths) {
+			const packageIdentity = this.findNearestPackageIdentity(extensionPath);
+			if (packageIdentity) {
+				if (seenPackageNames.has(packageIdentity.key)) {
+					continue;
+				}
+				seenPackageNames.add(packageIdentity.key);
+			}
+			dedupedPaths.push(extensionPath);
+		}
+
+		return dedupedPaths;
+	}
+
 	private loadThemes(
 		paths: string[],
 		includeDefaults: boolean = true,
@@ -944,6 +1005,20 @@ export class DefaultResourceLoader implements ResourceLoader {
 		return target.startsWith(prefix);
 	}
 
+	private isBuiltinExtensionPath(extensionPath: string): boolean {
+		return extensionPath.startsWith("<builtin:");
+	}
+
+	private shouldSuppressExtensionConflict(existingOwner: string, candidateOwner: string): boolean {
+		if (this.isBuiltinExtensionPath(existingOwner) || this.isBuiltinExtensionPath(candidateOwner)) {
+			return true;
+		}
+
+		const existingPackageIdentity = this.findNearestPackageIdentity(existingOwner);
+		const candidatePackageIdentity = this.findNearestPackageIdentity(candidateOwner);
+		return existingPackageIdentity !== undefined && existingPackageIdentity.key === candidatePackageIdentity?.key;
+	}
+
 	private detectExtensionConflicts(extensions: Extension[]): Array<{ path: string; message: string }> {
 		const conflicts: Array<{ path: string; message: string }> = [];
 
@@ -956,6 +1031,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 			for (const toolName of ext.tools.keys()) {
 				const existingOwner = toolOwners.get(toolName);
 				if (existingOwner && existingOwner !== ext.path) {
+					if (this.shouldSuppressExtensionConflict(existingOwner, ext.path)) {
+						continue;
+					}
 					conflicts.push({
 						path: ext.path,
 						message: `Tool "${toolName}" conflicts with ${existingOwner}`,
@@ -969,6 +1047,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 			for (const flagName of ext.flags.keys()) {
 				const existingOwner = flagOwners.get(flagName);
 				if (existingOwner && existingOwner !== ext.path) {
+					if (this.shouldSuppressExtensionConflict(existingOwner, ext.path)) {
+						continue;
+					}
 					conflicts.push({
 						path: ext.path,
 						message: `Flag "--${flagName}" conflicts with ${existingOwner}`,

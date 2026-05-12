@@ -1,5 +1,24 @@
 # changes
 
+## Extension duplicate resource conflict policy (2026-05-12)
+
+### What changed
+
+- `src/core/resource-loader.ts`: Extension paths are deduped by nearest `package.json` package name plus relative extension entry before loading, so the same package installed from both a git package checkout and `~/.senpi/agent/extensions/` loads once without dropping multi-extension packages.
+- Builtin extensions now precede disk-loaded extensions in the runtime array, and builtin-vs-external tool/flag name collisions no longer surface as startup errors.
+
+### Why
+
+- Users with both installed and manually cloned `code-yeongyu/pi-*` extensions saw noisy duplicate tool/flag conflict errors at startup, even when the duplicates represented the same logical extension or a builtin vendored copy.
+
+### Why extension system couldn't handle this
+
+- Extension factories only run after resource discovery and conflict diagnostics. Deduping package paths and classifying builtin/external conflicts has to happen in the core resource loader before the TUI renders startup diagnostics.
+
+### Expected merge conflict zones
+
+- LOW: `resource-loader.ts` around extension path assembly and `detectExtensionConflicts()` if upstream changes resource precedence or conflict diagnostics.
+
 ## models.json per-model prompt preset metadata (2026-05-12)
 
 ### What changed
