@@ -82,4 +82,70 @@ describe("AssistantMessageComponent", () => {
 		expect(expanded).toContain("▾ openai · providerNative · web_search");
 		expect(expanded).toContain('"title": "Result 59"');
 	});
+
+	test("renders Anthropic server web search calls as compact providerNative summaries", () => {
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent({
+			...createAssistantMessage([
+				{
+					type: "providerNative",
+					subtype: "server_tool_use",
+					raw: {
+						type: "server_tool_use",
+						id: "srvtoolu_123",
+						name: "web_search",
+						input: { query: "latest ast-grep release" },
+					},
+				},
+			]),
+			api: "anthropic-messages",
+			provider: "anthropic",
+		});
+
+		const rendered = component.render(120).join("\n");
+		expect(rendered).toContain("▸ anthropic · web_search · server_tool_use");
+		expect(rendered).toContain('query: "latest ast-grep release"');
+		expect(rendered).not.toContain('"type": "server_tool_use"');
+	});
+
+	test("renders Anthropic web search results without dumping encrypted payloads", () => {
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent({
+			...createAssistantMessage([
+				{
+					type: "providerNative",
+					subtype: "web_search_tool_result",
+					raw: {
+						type: "web_search_tool_result",
+						tool_use_id: "srvtoolu_123",
+						content: [
+							{
+								type: "web_search_result",
+								title: "ast-grep documentation",
+								url: "https://ast-grep.github.io/",
+								encrypted_content: "secret-payload",
+							},
+							{
+								type: "web_search_result",
+								title: "ast-grep releases",
+								url: "https://github.com/ast-grep/ast-grep/releases",
+							},
+						],
+					},
+				},
+			]),
+			api: "anthropic-messages",
+			provider: "anthropic",
+		});
+
+		const rendered = component.render(160).join("\n");
+		expect(rendered).toContain("▸ anthropic · web_search results");
+		expect(rendered).toContain("2 results");
+		expect(rendered).toContain("ast-grep documentation");
+		expect(rendered).toContain("https://ast-grep.github.io/");
+		expect(rendered).not.toContain("secret-payload");
+		expect(rendered).not.toContain("encrypted_content");
+	});
 });

@@ -1,5 +1,23 @@
 # changes
 
+## compact provider-native web search rendering (2026-05-14)
+
+### What changed
+
+- `components/assistant-message.ts`: Anthropic native `server_tool_use` web-search calls and `web_search_tool_result` blocks render as compact TUI summaries instead of raw provider JSON.
+
+### Why
+
+- The raw provider-native JSON exposed implementation fields such as `encrypted_content` and made native web search blocks visually inconsistent with normal tool widgets.
+
+### Why extension system couldn't handle this
+
+- Provider-native assistant content is rendered by the built-in assistant message component before extension tool renderers are involved.
+
+### Expected merge conflict zones
+
+- LOW: provider-native formatting helpers in `components/assistant-message.ts`.
+
 ## Slash command path tilde expansion (2026-05-13)
 
 ### What changed
