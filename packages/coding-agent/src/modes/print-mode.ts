@@ -10,6 +10,7 @@ import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.js";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.js";
 import { killTrackedDetachedChildren } from "../utils/shell.js";
+import { formatProviderNativeBody, formatProviderNativeSummary } from "./provider-native-rendering.js";
 
 /**
  * Options for print mode.
@@ -139,9 +140,8 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 						if (content.type === "text") {
 							writeRawStdout(`${content.text}\n`);
 						} else if (content.type === "providerNative") {
-							const providerPrefix = assistantMsg.provider ? `${assistantMsg.provider} · ` : "";
-							writeRawStdout(`▸ ${providerPrefix}providerNative · ${content.subtype}\n`);
-							writeRawStdout(`${stringifyProviderNative(content.raw)}\n`);
+							writeRawStdout(`${formatProviderNativeSummary(assistantMsg, content, false)}\n`);
+							writeRawStdout(`${formatProviderNativeBody(content, false)}\n`);
 						}
 					}
 				}
@@ -158,13 +158,5 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		}
 		await disposeRuntime();
 		await flushRawStdout();
-	}
-}
-
-function stringifyProviderNative(raw: unknown): string {
-	try {
-		return JSON.stringify(raw, null, 2) ?? "null";
-	} catch {
-		return String(raw);
 	}
 }

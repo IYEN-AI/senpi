@@ -1,35 +1,11 @@
-import type { AssistantMessage, ProviderNativeContent } from "@earendil-works/pi-ai";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
+import { formatProviderNativeBody, formatProviderNativeSummary } from "../../provider-native-rendering.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
 const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
-	const value = record?.[key];
-	return typeof value === "string" ? value : undefined;
-}
-
-function formatProviderName(message: AssistantMessage): string {
-	return message.provider ? `${message.provider} · ` : "";
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-	return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function getWebSearchResults(raw: unknown): Record<string, unknown>[] | undefined {
-	if (!isRecord(raw) || !Array.isArray(raw.content)) {
-		return undefined;
-	}
-
-	return raw.content.filter(isRecord).filter((item) => readString(item, "type") === "web_search_result");
-}
 
 /**
  * Component that renders a complete assistant message
@@ -183,10 +159,10 @@ export class AssistantMessageComponent extends Container {
 				}
 			} else if (content.type === "providerNative") {
 				this.contentContainer.addChild(
-					new Text(theme.fg("muted", this.formatProviderNativeSummary(message, content)), 1, 0),
+					new Text(theme.fg("muted", formatProviderNativeSummary(message, content, this.expanded)), 1, 0),
 				);
 				this.contentContainer.addChild(
-					new Text(theme.fg("dim", this.formatProviderNativeBody(content, this.expanded)), 3, 0),
+					new Text(theme.fg("dim", formatProviderNativeBody(content, this.expanded)), 3, 0),
 				);
 				const hasVisibleContentAfter = message.content
 					.slice(i + 1)
@@ -246,108 +222,5 @@ export class AssistantMessageComponent extends Container {
 		this.cachedLines = undefined;
 		this.cachedSignature = undefined;
 		this.cachedWidth = undefined;
-	}
-
-	private formatProviderNativeSummary(message: AssistantMessage, content: ProviderNativeContent): string {
-		const specialized = this.formatSpecializedProviderNativeSummary(message, content);
-		if (specialized) {
-			return specialized;
-		}
-
-		const provider = formatProviderName(message);
-		const marker = this.expanded ? "▾" : "▸";
-		return `${marker} ${provider}providerNative · ${content.subtype}`;
-	}
-
-	private formatProviderNativeBody(content: ProviderNativeContent, expanded: boolean): string {
-		const specialized = this.formatSpecializedProviderNativeBody(content);
-		if (specialized) {
-			return specialized;
-		}
-
-		const rawJson = this.stringifyProviderNative(content.raw);
-		if (expanded || rawJson.length <= 2000) {
-			return rawJson;
-		}
-		return `${rawJson.slice(0, 2000)}…`;
-	}
-
-	private formatSpecializedProviderNativeSummary(
-		message: AssistantMessage,
-		content: ProviderNativeContent,
-	): string | undefined {
-		const provider = formatProviderName(message);
-		const marker = this.expanded ? "▾" : "▸";
-		if (content.subtype === "server_tool_use") {
-			const raw = isRecord(content.raw) ? content.raw : undefined;
-			const name = readString(raw, "name");
-			if (name) {
-				return `${marker} ${provider}${name} · server_tool_use`;
-			}
-		}
-		if (content.subtype === "web_search_tool_result") {
-			return `${marker} ${provider}web_search results`;
-		}
-		return undefined;
-	}
-
-	private formatSpecializedProviderNativeBody(content: ProviderNativeContent): string | undefined {
-		if (content.subtype === "server_tool_use") {
-			return this.formatServerToolUseBody(content.raw);
-		}
-		if (content.subtype === "web_search_tool_result") {
-			return this.formatWebSearchResultBody(content.raw);
-		}
-		return undefined;
-	}
-
-	private formatServerToolUseBody(raw: unknown): string | undefined {
-		const record = isRecord(raw) ? raw : undefined;
-		const input = isRecord(record?.input) ? record.input : undefined;
-		const query = readString(input, "query");
-		if (query) {
-			return `query: ${JSON.stringify(query)}`;
-		}
-		const name = readString(record, "name");
-		if (name) {
-			return `name: ${name}`;
-		}
-		return undefined;
-	}
-
-	private formatWebSearchResultBody(raw: unknown): string | undefined {
-		const results = getWebSearchResults(raw);
-		if (!results) {
-			return undefined;
-		}
-		if (results.length === 0) {
-			return "0 results";
-		}
-
-		const lines = [pluralize(results.length, "result")];
-		const visibleResults = this.expanded ? results : results.slice(0, 3);
-		for (const result of visibleResults) {
-			const title = readString(result, "title");
-			const url = readString(result, "url");
-			if (title && url) {
-				lines.push(`${title} ${url}`);
-			} else if (title) {
-				lines.push(title);
-			} else if (url) {
-				lines.push(url);
-			}
-		}
-		if (!this.expanded && results.length > visibleResults.length) {
-			lines.push(`… ${results.length - visibleResults.length} more results`);
-		}
-		return lines.join("\n");
-	}
-
-	private stringifyProviderNative(raw: unknown): string {
-		try {
-			return JSON.stringify(raw, null, 2) ?? "null";
-		} catch {
-			return String(raw);
-		}
 	}
 }

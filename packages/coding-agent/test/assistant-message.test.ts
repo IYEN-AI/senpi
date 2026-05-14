@@ -148,4 +148,87 @@ describe("AssistantMessageComponent", () => {
 		expect(rendered).not.toContain("secret-payload");
 		expect(rendered).not.toContain("encrypted_content");
 	});
+
+	test("#given OpenAI native web_search_call sources #when rendering providerNative #then displays status query and sources", () => {
+		// given
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent({
+			...createAssistantMessage([
+				{
+					type: "providerNative",
+					subtype: "web_search_call",
+					raw: {
+						type: "web_search_call",
+						id: "ws_123",
+						status: "completed",
+						action: {
+							type: "search",
+							queries: ["native search tui"],
+							sources: [
+								{
+									title: "OpenAI web search docs",
+									url: "https://platform.openai.com/docs/guides/tools-web-search",
+									snippet: "Use web search to retrieve current information.",
+								},
+							],
+						},
+					},
+				},
+			]),
+			api: "openai-responses",
+			provider: "openai",
+		});
+
+		// when
+		const rendered = component.render(180).join("\n");
+
+		// then
+		expect(rendered).toContain("▸ openai · web_search · completed");
+		expect(rendered).toContain("status: completed");
+		expect(rendered).toContain('query: "native search tui"');
+		expect(rendered).toContain("1 source");
+		expect(rendered).toContain("OpenAI web search docs");
+		expect(rendered).toContain("https://platform.openai.com/docs/guides/tools-web-search");
+		expect(rendered).toContain("Use web search to retrieve current information.");
+		expect(rendered).not.toContain('"type": "web_search_call"');
+	});
+
+	test("#given Google grounding metadata #when rendering providerNative #then displays queries and grounded sources", () => {
+		// given
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent({
+			...createAssistantMessage([
+				{
+					type: "providerNative",
+					subtype: "groundingMetadata",
+					raw: {
+						webSearchQueries: ["Gemini native search grounding"],
+						groundingChunks: [
+							{
+								web: {
+									title: "Gemini grounding docs",
+									uri: "https://ai.google.dev/gemini-api/docs/grounding",
+								},
+							},
+						],
+					},
+				},
+			]),
+			api: "google-generative-ai",
+			provider: "google",
+		});
+
+		// when
+		const rendered = component.render(180).join("\n");
+
+		// then
+		expect(rendered).toContain("▸ google · google_search results");
+		expect(rendered).toContain('query: "Gemini native search grounding"');
+		expect(rendered).toContain("1 source");
+		expect(rendered).toContain("Gemini grounding docs");
+		expect(rendered).toContain("https://ai.google.dev/gemini-api/docs/grounding");
+		expect(rendered).not.toContain("groundingChunks");
+	});
 });
