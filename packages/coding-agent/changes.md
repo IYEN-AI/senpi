@@ -1,5 +1,16 @@
 # Local fork changes
 
+## 2026-05-15 — rebuild stale linked CLI before launching `senpi`
+
+- Changed:
+  - `scripts/build-all.mjs`
+  - `scripts/create-root-senpi-wrapper.mjs`
+  - `scripts/create-root-senpi-wrapper.test.mjs`
+- Why: The PATH-visible `senpi` shim runs the root `dist/senpi` wrapper. If source changes were committed but the workspace dist artifacts were not rebuilt, the linked command could still execute stale `packages/*/dist` code and reproduce fixed bugs.
+- What changed: The root build writes the git HEAD it built into `dist/.senpi-build-head`. The generated root wrapper now rebuilds when that stamp is missing or stale, when required dist markers are missing, or when relevant workspace source/package/script mtimes are newer than the build stamp. In a git checkout, if any check says the linked build is stale, it runs `scripts/build-all.mjs` before launching `packages/coding-agent/dist/senpi`.
+- Why the extension system could not handle this: stale dist is a build/link packaging problem that occurs before the runtime extension system starts.
+- Merge-conflict risk: low. The expected conflict zone is `scripts/create-root-senpi-wrapper.mjs` if upstream changes the local build/link shim.
+
 ## 2026-05-13 — copy all non-TypeScript resources into dist via copy-assets
 
 - Changed: `packages/coding-agent/package.json`
