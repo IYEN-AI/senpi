@@ -1,7 +1,9 @@
-import type { Api } from "@earendil-works/pi-ai";
+import type { Api, Model, OpenAIResponsesCompat } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "../../types.js";
 
 type ToolDefinition = Record<string, unknown>;
+type OpenAiWebSearchModel = Pick<Model<Api>, "api" | "baseUrl" | "compat">;
+type OpenAiWebSearchTarget = Api | OpenAiWebSearchModel | undefined;
 
 const OPENAI_RESPONSES_APIS: ReadonlySet<Api> = new Set(["openai-responses", "azure-openai-responses"]);
 const ENABLE_ENV = "PI_OPENAI_WEB_SEARCH";
@@ -37,6 +39,37 @@ function isOpenAiResponsesApi(api: Api | undefined): api is "openai-responses" |
 	return api !== undefined && OPENAI_RESPONSES_APIS.has(api);
 }
 
+function resolveTarget(target: OpenAiWebSearchTarget): OpenAiWebSearchModel | undefined {
+	if (target === undefined) {
+		return undefined;
+	}
+	if (typeof target === "string") {
+		return { api: target, baseUrl: target === "openai-responses" ? "https://api.openai.com/v1" : "" };
+	}
+	return target;
+}
+
+function isOpenAiResponsesNativeEndpoint(model: OpenAiWebSearchModel): boolean {
+	try {
+		return new URL(model.baseUrl || "https://api.openai.com/v1").hostname === "api.openai.com";
+	} catch {
+		return false;
+	}
+}
+
+export function supportsNativeOpenAiWebSearch(target: OpenAiWebSearchTarget): boolean {
+	const model = resolveTarget(target);
+	if (!isOpenAiResponsesApi(model?.api)) {
+		return false;
+	}
+	if (model.api === "azure-openai-responses") {
+		return true;
+	}
+
+	const compat = model.compat as OpenAIResponsesCompat | undefined;
+	return compat?.supportsWebSearchPreview ?? isOpenAiResponsesNativeEndpoint(model);
+}
+
 function isNativeOpenAiWebSearchType(value: unknown): value is "web_search_preview" | "web_search_preview_2025_03_11" {
 	return value === "web_search_preview" || value === "web_search_preview_2025_03_11";
 }
@@ -67,22 +100,33 @@ function stripNativeOpenAiWebSearch(payload: unknown): unknown {
 		return payload;
 	}
 
-	const tools = payload.tools;
-	if (!Array.isArray(tools)) {
-		return payload;
-	}
-
 	let changed = false;
-	const sanitized: unknown[] = [];
-	for (const tool of tools) {
-		if (isRecord(tool) && isNativeOpenAiWebSearchType(tool.type)) {
+	const sanitized: Record<string, unknown> = { ...payload };
+
+	const tools = payload.tools;
+	if (Array.isArray(tools)) {
+		const sanitizedTools = tools.filter((tool) => !(isRecord(tool) && isNativeOpenAiWebSearchType(tool.type)));
+		if (sanitizedTools.length !== tools.length) {
 			changed = true;
-			continue;
+			sanitized.tools = sanitizedTools;
 		}
-		sanitized.push(tool);
 	}
 
-	return changed ? { ...payload, tools: sanitized } : payload;
+	const include = payload.include;
+	if (Array.isArray(include)) {
+		const sanitizedInclude = include.filter((value) => value !== WEB_SEARCH_SOURCES_INCLUDE);
+		if (sanitizedInclude.length !== include.length) {
+			changed = true;
+			sanitized.include = sanitizedInclude;
+		}
+	}
+
+	if (isRecord(payload.tool_choice) && isNativeOpenAiWebSearchType(payload.tool_choice.type)) {
+		changed = true;
+		delete sanitized.tool_choice;
+	}
+
+	return changed ? sanitized : payload;
 }
 
 function sanitizeTools(tools: unknown[], options: SanitizeToolsOptions): SanitizedTools {
@@ -115,8 +159,9 @@ function includeWebSearchSources(payload: Record<string, unknown>): string[] {
 	return include.includes(WEB_SEARCH_SOURCES_INCLUDE) ? include : [...include, WEB_SEARCH_SOURCES_INCLUDE];
 }
 
-export function addOpenAiWebSearchToPayload(api: Api | undefined, payload: unknown): unknown {
-	if (!isOpenAiResponsesApi(api)) {
+export function addOpenAiWebSearchToPayload(target: OpenAiWebSearchTarget, payload: unknown): unknown {
+	const model = resolveTarget(target);
+	if (!isOpenAiResponsesApi(model?.api)) {
 		// Defense in depth. `web_search_preview` is an OpenAI Responses-only tool
 		// type, but proxies that translate openai-responses → anthropic-messages
 		// (e.g., ccapi/quotio for Claude models) can forward it verbatim, which
@@ -130,18 +175,28 @@ export function addOpenAiWebSearchToPayload(api: Api | undefined, payload: unkno
 		return payload;
 	}
 
+	const supportsNativeWebSearch = supportsNativeOpenAiWebSearch(model);
 	const tools = Array.isArray(payload.tools) ? payload.tools : [];
-	const shouldInjectWebSearch = isOpenaiWebSearchEnabled();
+	const shouldInjectWebSearch = supportsNativeWebSearch && isOpenaiWebSearchEnabled();
+	const strippedPayload = supportsNativeWebSearch ? payload : stripNativeOpenAiWebSearch(payload);
+	if (!isRecord(strippedPayload)) {
+		return strippedPayload;
+	}
+
+	const strippedTools = Array.isArray(strippedPayload.tools) ? strippedPayload.tools : [];
+	const activeTools = supportsNativeWebSearch ? tools : strippedTools;
 	const sanitized = sanitizeTools(tools, { stripFunctionWebSearch: shouldInjectWebSearch });
 	const sanitizedTools = sanitized.tools;
 	if (!shouldInjectWebSearch) {
-		if (!sanitized.changed) {
-			return payload;
+		const nativeStripped = strippedPayload !== payload;
+		const passiveSanitized = sanitizeTools(activeTools, { stripFunctionWebSearch: false });
+		if (!nativeStripped && !passiveSanitized.changed) {
+			return strippedPayload;
 		}
 
 		return {
-			...payload,
-			tools: sanitizedTools,
+			...strippedPayload,
+			tools: passiveSanitized.tools,
 		};
 	}
 
@@ -182,7 +237,7 @@ Prefer web search over guessing when freshness matters.
 
 export default function openaiWebSearchExtension(pi: ExtensionAPI): void {
 	pi.on("before_provider_request", (event, ctx) => {
-		return addOpenAiWebSearchToPayload(ctx.model?.api, event.payload);
+		return addOpenAiWebSearchToPayload(ctx.model, event.payload);
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -198,7 +253,7 @@ export default function openaiWebSearchExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		if (!isOpenAiResponsesApi(ctx.model?.api)) {
+		if (!supportsNativeOpenAiWebSearch(ctx.model)) {
 			return undefined;
 		}
 

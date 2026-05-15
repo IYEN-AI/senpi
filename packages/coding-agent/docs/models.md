@@ -413,6 +413,15 @@ For providers with partial OpenAI compatibility, use the `compat` field.
 | `openRouterRouting` | OpenRouter provider routing preferences. This object is sent as-is in the `provider` field of the [OpenRouter API request](https://openrouter.ai/docs/guides/routing/provider-selection). |
 | `vercelGatewayRouting` | Vercel AI Gateway routing config for provider selection (`only`, `order`) |
 
+For `api: "openai-responses"` models, only Responses-specific `compat` fields apply:
+
+| Field | Description |
+|-------|-------------|
+| `sendSessionIdHeader` | Send the OpenAI cache-affinity `session_id` header from `sessionId`. Default: `true`. |
+| `supportsLongCacheRetention` | Accepts `prompt_cache_retention: "24h"` when cache retention is `long`. Default: `true`. |
+| `supportsWebSocket` | Supports OpenAI Responses WebSocket transport. Default: `true` only for `api.openai.com`. |
+| `supportsWebSearchPreview` | Supports OpenAI-native `web_search_preview` tools. Default: `true` only for `api.openai.com`; custom Responses proxies must opt in. |
+
 `openrouter` uses `reasoning: { effort }`. `together` uses `reasoning: { enabled }` and also `reasoning_effort` when `supportsReasoningEffort` is enabled. `qwen` uses top-level `enable_thinking`. Use `qwen-chat-template` for local Qwen-compatible servers that require `chat_template_kwargs.enable_thinking`.
 
 `cacheControlFormat: "anthropic"` is for OpenAI-compatible providers that expose Anthropic-style prompt caching through `cache_control` markers on text content and tool definitions.

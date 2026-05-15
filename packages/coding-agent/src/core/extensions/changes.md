@@ -1,5 +1,27 @@
 # Core Extensions Changes
 
+## 2026-05-15 - OpenAI native web search endpoint compatibility
+
+### What changed
+
+- `builtin/openai-web-search/index.ts`: The extension now passes the full selected model into OpenAI native web search handling and only injects `web_search_preview` for Azure Responses, official `api.openai.com` OpenAI Responses, or custom Responses models with `compat.supportsWebSearchPreview: true`.
+- Custom OpenAI Responses endpoints now strip OpenAI native `web_search_preview` / `web_search_preview_*`, matching `tool_choice`, and `web_search_call.action.sources` includes by default while preserving ordinary function tools such as a configurable `web_search`.
+- `model-registry.ts`: Added `compat.supportsWebSearchPreview` to the models.json schema so users can opt custom OpenAI-compatible providers into native web search support.
+- `test/suite/openai-web-search-extension.test.ts`: Added regression coverage for default custom-endpoint stripping and explicit opt-in preservation.
+
+### Why
+
+- The failing GPT-5.5 session used an `openai-responses` model pointed at a custom proxy endpoint. The old extension keyed only on `api`, injected OpenAI-native `web_search_preview`, and the downstream endpoint rejected the tool schema. Matching the `../ai` and `../opencode` pattern means provider-native tools are only sent when the endpoint explicitly supports that provider's native tool dialect.
+
+### Why extension system couldn't handle this alone
+
+- The extension can prevent its own automatic injection, but the selected model's endpoint capability is the real decision point. The companion `pi-ai` provider guard still handles later hook mutations after this extension runs.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/openai-web-search/index.ts` around `addOpenAiWebSearchToPayload()` and `before_agent_start`.
+- LOW: `model-registry.ts` provider compat schema if upstream adds more Responses compatibility fields.
+
 ## 2026-05-15 - OpenAI native web_search_preview strip for non-OpenAI-Responses payloads
 
 ### What changed

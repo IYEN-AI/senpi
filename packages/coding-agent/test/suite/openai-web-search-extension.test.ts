@@ -6,6 +6,23 @@ import openaiWebSearchExtension, {
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 
 const ENABLE_ENV = "PI_OPENAI_WEB_SEARCH";
+const OPENAI_RESPONSES_MODEL = {
+	api: "openai-responses",
+	baseUrl: "https://api.openai.com/v1",
+} as const;
+const AZURE_OPENAI_RESPONSES_MODEL = {
+	api: "azure-openai-responses",
+	baseUrl: "https://example.openai.azure.com/openai",
+} as const;
+const PROXY_OPENAI_RESPONSES_MODEL = {
+	api: "openai-responses",
+	baseUrl: "https://quotio.example/v1",
+} as const;
+const PROXY_OPENAI_RESPONSES_WEB_SEARCH_MODEL = {
+	api: "openai-responses",
+	baseUrl: "https://quotio.example/v1",
+	compat: { supportsWebSearchPreview: true },
+} as const;
 
 type TestUi = {
 	setStatus: (key: string, value: string | undefined) => void;
@@ -105,7 +122,7 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ name: "other_tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -119,7 +136,7 @@ describe("openai-web-search builtin extension", () => {
 		};
 
 		// when
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			include: string[];
 		};
 
@@ -135,7 +152,7 @@ describe("openai-web-search builtin extension", () => {
 		};
 
 		// when
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			include: string[];
 		};
 
@@ -148,7 +165,7 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ name: "other_tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("azure-openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(AZURE_OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -160,7 +177,7 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ type: "web_search_preview" }, { name: "other_tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -176,7 +193,7 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ name: "web_search", description: "pi-websearch function" }, { name: "other_tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -193,7 +210,7 @@ describe("openai-web-search builtin extension", () => {
 			],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -208,7 +225,7 @@ describe("openai-web-search builtin extension", () => {
 			],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -228,7 +245,7 @@ describe("openai-web-search builtin extension", () => {
 			],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 
@@ -251,7 +268,7 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ name: "web_search", description: "function tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload);
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload);
 
 		expect(result).toBe(payload);
 	});
@@ -261,7 +278,37 @@ describe("openai-web-search builtin extension", () => {
 			tools: [{ name: "other_tool" }],
 		};
 
-		const result = addOpenAiWebSearchToPayload("openai-responses", payload) as {
+		const result = addOpenAiWebSearchToPayload(OPENAI_RESPONSES_MODEL, payload) as {
+			tools: Array<Record<string, unknown>>;
+		};
+
+		expect(result.tools).toContainEqual({ type: "web_search_preview" });
+	});
+
+	it("strips native web_search_preview for custom OpenAI Responses endpoints by default", () => {
+		const payload = {
+			include: ["reasoning.encrypted_content", "web_search_call.action.sources"],
+			tool_choice: { type: "web_search_preview" },
+			tools: [{ type: "web_search_preview" }, { name: "web_search", description: "function tool" }],
+		};
+
+		const result = addOpenAiWebSearchToPayload(PROXY_OPENAI_RESPONSES_MODEL, payload) as {
+			include: string[];
+			tool_choice?: unknown;
+			tools: Array<Record<string, unknown>>;
+		};
+
+		expect(result.tools).toEqual([{ name: "web_search", description: "function tool" }]);
+		expect(result.include).toEqual(["reasoning.encrypted_content"]);
+		expect(result.tool_choice).toBeUndefined();
+	});
+
+	it("preserves native web_search_preview for custom OpenAI Responses endpoints that opt in", () => {
+		const payload = {
+			tools: [{ name: "other_tool" }],
+		};
+
+		const result = addOpenAiWebSearchToPayload(PROXY_OPENAI_RESPONSES_WEB_SEARCH_MODEL, payload) as {
 			tools: Array<Record<string, unknown>>;
 		};
 

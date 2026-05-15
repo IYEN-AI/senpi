@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- Fixed OpenAI native web search injection to require an official or explicitly opted-in OpenAI Responses endpoint, preventing custom Responses proxies from receiving unsupported `web_search_preview` tools.
+
 ## [2026.5.15-3] - 2026-05-15
 
 ### Added
