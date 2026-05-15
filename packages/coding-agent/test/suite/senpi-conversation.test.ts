@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
 	emitBuiltinSystemMessageFailure,
-	SANEPI_CONVERSATION_EVENT,
-	SANEPI_SYSTEM_PREFIX,
+	SENPI_CONVERSATION_EVENT,
+	SENPI_SYSTEM_PREFIX,
 	sendBuiltinCustomMessage,
 	sendBuiltinUserMessage,
 } from "../../src/core/extensions/builtin/system-messages.js";
-import { SANEPI_SYSTEM_PREFIX as TODO_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/todotools/system-messages.js";
+import { SENPI_SYSTEM_PREFIX as TODO_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/todotools/system-messages.js";
 
 function createMockPi() {
 	return {
@@ -18,9 +18,9 @@ function createMockPi() {
 	};
 }
 
-describe("sanepi conversation helpers", () => {
+describe("senpi conversation helpers", () => {
 	it("uses the senpi marker for injected system prefixes", () => {
-		expect(SANEPI_SYSTEM_PREFIX).toBe("[system:senpi]");
+		expect(SENPI_SYSTEM_PREFIX).toBe("[system:senpi]");
 		expect(TODO_SYSTEM_PREFIX).toBe("[system:senpi]");
 	});
 
@@ -31,9 +31,9 @@ describe("sanepi conversation helpers", () => {
 			sessionId: "session-1",
 		});
 
-		expect(pi.sendUserMessage).toHaveBeenCalledWith(`${SANEPI_SYSTEM_PREFIX}\nContinue the task`);
+		expect(pi.sendUserMessage).toHaveBeenCalledWith(`${SENPI_SYSTEM_PREFIX}\nContinue the task`);
 		expect(pi.events.emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -42,9 +42,9 @@ describe("sanepi conversation helpers", () => {
 				sessionId: "session-1",
 				conversation: expect.objectContaining({
 					kind: "user_message",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 				}),
-				text: `${SANEPI_SYSTEM_PREFIX}\nContinue the task`,
+				text: `${SENPI_SYSTEM_PREFIX}\nContinue the task`,
 			}),
 		);
 	});
@@ -69,14 +69,14 @@ describe("sanepi conversation helpers", () => {
 				content: [
 					expect.objectContaining({
 						type: "text",
-						text: `${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nDone\n</system-reminder>`,
+						text: `${SENPI_SYSTEM_PREFIX}\n<system-reminder>\nDone\n</system-reminder>`,
 					}),
 				],
 			}),
 			{ triggerTurn: true, deliverAs: "followUp" },
 		);
 		expect(pi.events.emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -86,7 +86,7 @@ describe("sanepi conversation helpers", () => {
 				conversation: expect.objectContaining({
 					kind: "custom_message",
 					customType: "background-task.complete",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 					triggerTurn: true,
 					deliverAs: "followUp",
 				}),
@@ -94,7 +94,7 @@ describe("sanepi conversation helpers", () => {
 		);
 	});
 
-	it("emits a unified failed event for sanepi conversation injection failures", () => {
+	it("emits a unified failed event for senpi conversation injection failures", () => {
 		const pi = createMockPi();
 
 		emitBuiltinSystemMessageFailure(pi as never, {
@@ -106,7 +106,7 @@ describe("sanepi conversation helpers", () => {
 		});
 
 		expect(pi.events.emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -115,9 +115,9 @@ describe("sanepi conversation helpers", () => {
 				sessionId: "session-3",
 				conversation: expect.objectContaining({
 					kind: "user_message",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 				}),
-				text: `${SANEPI_SYSTEM_PREFIX}\nContinue after failure`,
+				text: `${SENPI_SYSTEM_PREFIX}\nContinue after failure`,
 				errorMessage: "dispatch failed",
 			}),
 		);

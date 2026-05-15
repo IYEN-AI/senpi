@@ -31,7 +31,7 @@ These `../pi-extensions/*` packages are intended to be installed as standalone s
 
 | Extension | What it adds |
 |---|---|
-| [`../pi-extensions/pi-agent-system`](../pi-extensions/pi-agent-system) | Agent profiles via `SANEPI_AGENT_TYPE` / `PI_AGENT_TYPE`, with profile markdown, tool filtering, and prompt fragments. |
+| [`../pi-extensions/pi-agent-system`](../pi-extensions/pi-agent-system) | Agent profiles via `SENPI_AGENT_TYPE` / `PI_AGENT_TYPE`, with profile markdown, tool filtering, and prompt fragments. |
 | [`../pi-extensions/pi-ast-grep`](../pi-extensions/pi-ast-grep) | AST-aware code search/replace across 25 languages. Auto-downloads `sg` on first use. |
 | [`../pi-extensions/pi-goal`](../pi-extensions/pi-goal) | Persistent goal tracking with Codex-style goal tools, TUI footer, and continuation prompts. |
 | [`../pi-extensions/pi-lsp-client`](../pi-extensions/pi-lsp-client) | LSP integration: `lsp_rename`, `lsp_goto_definition`, `lsp_find_references`, `lsp_diagnostics`, plus a `/lsp` inspector. |

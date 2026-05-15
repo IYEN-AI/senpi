@@ -2,7 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type CompactionPreparation, compact, generateSummary } from "../src/core/compaction/index.js";
-import { SANEPI_SYSTEM_PREFIX } from "../src/core/extensions/builtin/system-messages.js";
+import { SENPI_SYSTEM_PREFIX } from "../src/core/extensions/builtin/system-messages.js";
 
 const { completeSimpleMock } = vi.hoisted(() => ({
 	completeSimpleMock: vi.fn(),
@@ -127,7 +127,7 @@ describe("generateSummary reasoning options", () => {
 			{
 				role: "custom",
 				customType: "background-task.complete",
-				content: `${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
+				content: `${SENPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
 				display: true,
 				timestamp: Date.now() + 1,
 			},
@@ -146,7 +146,7 @@ describe("generateSummary reasoning options", () => {
 		expect(promptText).toContain("Fix the compaction system.");
 		expect(promptText).not.toContain("background_output(task_id");
 		expect(promptText).not.toContain("<system-reminder>");
-		expect(promptText).not.toContain(SANEPI_SYSTEM_PREFIX);
+		expect(promptText).not.toContain(SENPI_SYSTEM_PREFIX);
 	});
 
 	it("clamps compaction summary maxTokens to the model output cap", async () => {

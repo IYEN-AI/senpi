@@ -1,6 +1,6 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SANEPI_CONVERSATION_EVENT, SANEPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
+import { SENPI_CONVERSATION_EVENT, SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
 import { buildContinuationPrompt } from "../../src/core/extensions/builtin/todotools/continuation/prompt.js";
 import { installContinuation } from "../../src/core/extensions/builtin/todotools/continuation/runtime.js";
 import type { TodoItem } from "../../src/core/extensions/builtin/todotools/state.js";
@@ -8,6 +8,7 @@ import type {
 	AgentEndEvent,
 	BeforeAgentStartEvent,
 	ExtensionContext,
+	ExtensionUIContext,
 	SessionShutdownEvent,
 	SessionStartEvent,
 } from "../../src/core/extensions/types.js";
@@ -63,11 +64,55 @@ function createMockContext(options?: {
 		isIdle: options?.isIdle ?? (() => true),
 		sessionManager: {
 			getSessionId: () => options?.sessionId ?? "session-1",
-		},
-		ui: {
-			notify: vi.fn(),
-		},
-	} as unknown as ExtensionContext;
+		} as never,
+		ui: createMockUI(),
+		modelRegistry: {} as never,
+		model: undefined,
+		serviceTier: undefined,
+		signal: undefined,
+		abort: vi.fn(),
+		hasPendingMessages: vi.fn().mockReturnValue(false),
+		shutdown: vi.fn(),
+		getContextUsage: vi.fn().mockReturnValue(undefined),
+		getCompactionSettings: vi.fn(() => ({}) as never),
+		compact: vi.fn(),
+		getMessageRevision: vi.fn().mockReturnValue(0),
+		applyCompaction: async () => ({ applied: false as const, reason: "rejected" as const }),
+		getSystemPrompt: vi.fn().mockReturnValue(""),
+	};
+}
+
+function createMockUI(): ExtensionUIContext {
+	return {
+		select: vi.fn().mockResolvedValue(undefined),
+		confirm: vi.fn().mockResolvedValue(false),
+		input: vi.fn().mockResolvedValue(undefined),
+		notify: vi.fn(),
+		onTerminalInput: vi.fn().mockReturnValue(() => {}),
+		setStatus: vi.fn(),
+		setWorkingMessage: vi.fn(),
+		setWorkingVisible: vi.fn(),
+		setWorkingIndicator: vi.fn(),
+		setHiddenThinkingLabel: vi.fn(),
+		setWidget: vi.fn(),
+		setFooter: vi.fn(),
+		setHeader: vi.fn(),
+		setTitle: vi.fn(),
+		custom: vi.fn().mockResolvedValue(undefined),
+		pasteToEditor: vi.fn(),
+		setEditorText: vi.fn(),
+		getEditorText: vi.fn().mockReturnValue(""),
+		editor: vi.fn().mockResolvedValue(undefined),
+		addAutocompleteProvider: vi.fn(),
+		setEditorComponent: vi.fn(),
+		getEditorComponent: vi.fn().mockReturnValue(undefined),
+		getAllThemes: vi.fn().mockReturnValue([]),
+		getTheme: vi.fn().mockReturnValue(undefined),
+		setTheme: vi.fn().mockReturnValue({ success: true }),
+		getToolsExpanded: vi.fn().mockReturnValue(false),
+		setToolsExpanded: vi.fn(),
+		theme: {} as never,
+	};
 }
 
 function createAgentEndEvent(stopReason: "stop" | "toolUse" | "error" | "aborted" | "length" = "stop"): AgentEndEvent {
@@ -155,12 +200,12 @@ describe("todotools continuation runtime", () => {
 		expect(mockPi.sendUserMessage).toHaveBeenCalledTimes(1);
 		expect(mockPi.sendUserMessage).toHaveBeenNthCalledWith(
 			1,
-			`${SANEPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(pendingTodos)}`,
+			`${SENPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(pendingTodos)}`,
 		);
 		expect(mockPi.sendUserMessage.mock.calls[0]).toHaveLength(1);
 		expect(typeof mockPi.sendUserMessage.mock.calls[0]?.[0]).toBe("string");
 		expect(mockPi.events.emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -169,9 +214,9 @@ describe("todotools continuation runtime", () => {
 				sessionId: "session-1",
 				conversation: expect.objectContaining({
 					kind: "user_message",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 				}),
-				text: `${SANEPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(pendingTodos)}`,
+				text: `${SENPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(pendingTodos)}`,
 			}),
 		);
 	});
@@ -383,7 +428,7 @@ describe("todotools continuation runtime", () => {
 			}),
 		);
 		expect(mockPi.events.emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -392,7 +437,7 @@ describe("todotools continuation runtime", () => {
 				sessionId: "session-3",
 				conversation: expect.objectContaining({
 					kind: "user_message",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 				}),
 				errorMessage: "follow-up failed",
 			}),

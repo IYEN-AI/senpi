@@ -5,7 +5,7 @@ import {
 	sendCompletionNotification,
 } from "../../src/core/extensions/builtin/background-task/notification.js";
 import type { BackgroundTask } from "../../src/core/extensions/builtin/background-task/types.js";
-import { SANEPI_CONVERSATION_EVENT, SANEPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
+import { SENPI_CONVERSATION_EVENT, SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
 
 describe("formatCompletionNotification", () => {
 	describe("#given one task still running after a completed task notification", () => {
@@ -141,7 +141,7 @@ Use \`background_output(task_id="<id>")\` to retrieve each result.
 		it("#when building the partial notification #then it uses task ID as fallback", () => {
 			// given
 			const input: NotificationInput = {
-				task: { id: "bg_xyz789", description: undefined as unknown as string, status: "completed" },
+				task: { id: "bg_xyz789", description: undefined, status: "completed" },
 				duration: "3s",
 				statusText: "COMPLETED",
 				allComplete: false,
@@ -162,14 +162,14 @@ Use \`background_output(task_id="<id>")\` to retrieve each result.
 		it("#when building the final notification #then it uses task ID as fallback instead of 'undefined'", () => {
 			// given
 			const input: NotificationInput = {
-				task: { id: "bg_abc123", description: undefined as unknown as string, status: "completed" },
+				task: { id: "bg_abc123", description: undefined, status: "completed" },
 				duration: "5s",
 				statusText: "COMPLETED",
 				allComplete: true,
 				remainingCount: 0,
 				completedTasks: [
-					{ id: "bg_abc123", description: undefined as unknown as string, status: "completed" },
-					{ id: "bg_def456", description: undefined as unknown as string, status: "completed" },
+					{ id: "bg_abc123", description: undefined, status: "completed" },
+					{ id: "bg_def456", description: undefined, status: "completed" },
 				],
 			};
 
@@ -207,7 +207,7 @@ Use \`background_output(task_id="<id>")\` to retrieve each result.
 });
 
 describe("sendCompletionNotification", () => {
-	it("prefixes the injected message and emits sanepi notification events", () => {
+	it("prefixes the injected message and emits senpi notification events", () => {
 		// given
 		const sendMessage = vi.fn();
 		const emit = vi.fn();
@@ -246,14 +246,14 @@ describe("sendCompletionNotification", () => {
 				content: [
 					expect.objectContaining({
 						type: "text",
-						text: expect.stringContaining(`${SANEPI_SYSTEM_PREFIX}\n<system-reminder>`),
+						text: expect.stringContaining(`${SENPI_SYSTEM_PREFIX}\n<system-reminder>`),
 					}),
 				],
 			}),
 			{ triggerTurn: true, deliverAs: "followUp" },
 		);
 		expect(emit).toHaveBeenCalledWith(
-			SANEPI_CONVERSATION_EVENT,
+			SENPI_CONVERSATION_EVENT,
 			expect.objectContaining({
 				version: 1,
 				source: "builtin",
@@ -263,7 +263,7 @@ describe("sendCompletionNotification", () => {
 				conversation: expect.objectContaining({
 					kind: "custom_message",
 					customType: "background-task.complete",
-					prefix: SANEPI_SYSTEM_PREFIX,
+					prefix: SENPI_SYSTEM_PREFIX,
 					triggerTurn: true,
 					deliverAs: "followUp",
 				}),

@@ -7,7 +7,7 @@ export type NotificationStatus = "COMPLETED" | "CANCELLED" | "ERROR";
 
 export interface NotificationTask {
 	id: string;
-	description: string;
+	description?: string | undefined;
 	status: BackgroundTask["status"];
 	error?: string;
 	result?: string;

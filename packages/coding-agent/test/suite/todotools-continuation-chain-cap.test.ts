@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { type FauxResponseStep, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.js";
-import { SANEPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
+import { SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
 import {
 	buildContinuationPrompt,
 	CONTINUATION_DIRECTIVE,
@@ -104,6 +104,8 @@ function createMockUI(): ExtensionUIContext {
 		onTerminalInput: vi.fn().mockReturnValue(() => {}),
 		setStatus: vi.fn(),
 		setWorkingMessage: vi.fn(),
+		setWorkingVisible: vi.fn(),
+		setWorkingIndicator: vi.fn(),
 		setHiddenThinkingLabel: vi.fn(),
 		setWidget: vi.fn(),
 		setFooter: vi.fn(),
@@ -114,9 +116,16 @@ function createMockUI(): ExtensionUIContext {
 		setEditorText: vi.fn(),
 		getEditorText: vi.fn().mockReturnValue(""),
 		editor: vi.fn().mockResolvedValue(undefined),
+		addAutocompleteProvider: vi.fn(),
 		setEditorComponent: vi.fn(),
+		getEditorComponent: vi.fn().mockReturnValue(undefined),
+		getAllThemes: vi.fn().mockReturnValue([]),
+		getTheme: vi.fn().mockReturnValue(undefined),
+		setTheme: vi.fn().mockReturnValue({ success: true }),
+		getToolsExpanded: vi.fn().mockReturnValue(false),
+		setToolsExpanded: vi.fn(),
 		theme: {} as never,
-	} as unknown as ExtensionUIContext;
+	};
 }
 
 afterEach(() => {
@@ -152,7 +161,7 @@ describe("todotools continuation chain cap", () => {
 		expect(injectedMessages).toEqual(
 			Array.from(
 				{ length: CONTINUATION_CHAIN_CAP },
-				() => `${SANEPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(PENDING_TODOS)}`,
+				() => `${SENPI_SYSTEM_PREFIX}\n${buildContinuationPrompt(PENDING_TODOS)}`,
 			),
 		);
 

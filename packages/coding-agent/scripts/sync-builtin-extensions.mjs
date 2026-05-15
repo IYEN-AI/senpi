@@ -27,10 +27,10 @@ const FILES = [
 	// monolithic sync would overwrite senpi's barrel index.ts and lose the refactor. Port
 	// behavior changes manually until the upstream package is restructured to match.
 	//
-	// pi-todotools has also diverged: senpi customizes SANEPI_SYSTEM_PREFIX to "[system:senpi]"
-	// (pi-todotools uses "[system:sanepi]") and `reportContinuationError` is wired into the
-	// unified `sanepi:conversation` event surface. Regular file-copy sync overwrites those
-	// customizations and breaks `test/suite/sanepi-conversation.test.ts`,
+	// pi-todotools has also diverged: senpi customizes SENPI_SYSTEM_PREFIX to "[system:senpi]"
+	// (pi-todotools uses "[system:senpi]") and `reportContinuationError` is wired into the
+	// unified `senpi:conversation` event surface. Regular file-copy sync overwrites those
+	// customizations and breaks `test/suite/senpi-conversation.test.ts`,
 	// `test/suite/todotools-continuation-runtime-unit.test.ts`, and
 	// `test/suite/todotools-continuation-chain-cap.test.ts`. Port improvements manually.
 ];

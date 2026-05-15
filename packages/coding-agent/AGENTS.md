@@ -1,6 +1,6 @@
 # packages/coding-agent
 
-`@code-yeongyu/senpi` — primary fork target. The CLI app users actually run (`senpi`, `sanepi` aliases). Highest merge-conflict surface against upstream `pi-mono`. **Always reach for the extension API before touching anything in `src/core/`**.
+`@code-yeongyu/senpi` — primary fork target. The CLI app users actually run (`senpi`). Highest merge-conflict surface against upstream `pi-mono`. **Always reach for the extension API before touching anything in `src/core/`**.
 
 ## STRUCTURE
 

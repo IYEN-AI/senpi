@@ -14,7 +14,7 @@
 
 ### Why the extension system can handle this now
 - `ExtensionAPI.getAllTools()`, `setActiveTools()`, and `before_agent_start` are sufficient for the extracted extension to filter tools and append per-agent prompt fragments.
-- `background-task` already passes the agent type through `SANEPI_AGENT_TYPE`.
+- `background-task` already passes the agent type through `SENPI_AGENT_TYPE`.
 
 ### Expected merge conflict zones
 - `builtin/index.ts` if upstream adds or reorders builtins.

@@ -1,8 +1,8 @@
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "../../types.js";
 
-export const SANEPI_SYSTEM_PREFIX = "[system:senpi]";
-export const SANEPI_CONVERSATION_EVENT = "sanepi:conversation";
+export const SENPI_SYSTEM_PREFIX = "[system:senpi]";
+export const SENPI_CONVERSATION_EVENT = "senpi:conversation";
 
 export type TodoSystemMessageRoute = "todotools.continuation";
 export type TodoConversationAction = "injected" | "failed";
@@ -15,7 +15,7 @@ export interface TodoConversationEvent {
 	sessionId?: string;
 	timestamp: number;
 	conversation: {
-		prefix: typeof SANEPI_SYSTEM_PREFIX;
+		prefix: typeof SENPI_SYSTEM_PREFIX;
 		kind: "user_message";
 		deliverAs?: "steer" | "followUp";
 	};
@@ -29,7 +29,7 @@ export interface TodoUserMessageOptions {
 }
 
 function prefixText(text: string): string {
-	return text.startsWith(SANEPI_SYSTEM_PREFIX) ? text : `${SANEPI_SYSTEM_PREFIX}\n${text}`;
+	return text.startsWith(SENPI_SYSTEM_PREFIX) ? text : `${SENPI_SYSTEM_PREFIX}\n${text}`;
 }
 
 function prefixContent(content: string | (TextContent | ImageContent)[]): string | (TextContent | ImageContent)[] {
@@ -39,7 +39,7 @@ function prefixContent(content: string | (TextContent | ImageContent)[]): string
 
 	const firstTextIndex = content.findIndex((part) => part.type === "text");
 	if (firstTextIndex === -1) {
-		return [{ type: "text", text: SANEPI_SYSTEM_PREFIX }, ...content];
+		return [{ type: "text", text: SENPI_SYSTEM_PREFIX }, ...content];
 	}
 
 	return content.map((part, index) => {
@@ -66,7 +66,7 @@ function extractText(content: string | (TextContent | ImageContent)[]): string {
 }
 
 function emitTodoConversationEvent(pi: ExtensionAPI, event: TodoConversationEvent): void {
-	pi.events.emit(SANEPI_CONVERSATION_EVENT, event);
+	pi.events.emit(SENPI_CONVERSATION_EVENT, event);
 }
 
 function createBaseEvent(args: {
@@ -85,7 +85,7 @@ function createBaseEvent(args: {
 		sessionId: args.sessionId,
 		timestamp: Date.now(),
 		conversation: {
-			prefix: SANEPI_SYSTEM_PREFIX,
+			prefix: SENPI_SYSTEM_PREFIX,
 			kind: "user_message",
 			deliverAs: args.deliverAs,
 		},

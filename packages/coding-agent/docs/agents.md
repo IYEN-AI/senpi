@@ -331,7 +331,7 @@ Now every agent must get user confirmation before writing or editing files.
 
 The agent system is implemented as a builtin extension that intercepts the task tool:
 
-1. **Environment variable** - When `task(agent_type="...")` is called, the agent type is passed via `SANEPI_AGENT_TYPE` environment variable to the subprocess
+1. **Environment variable** - When `task(agent_type="...")` is called, the agent type is passed via `SENPI_AGENT_TYPE` environment variable to the subprocess
 2. **Registry lookup** - On session start, the extension scans `~/.senpi/` and `.senpi/` for agent definitions, merges with built-in agents, and resolves by name
 3. **Tool filtering** - `setActiveTools()` removes denied tools from the LLM's tool list entirely (they don't appear in the API call)
 4. **Defense in depth** - A `tool_call` event handler acts as backup, catching any tools that slip through (e.g., added dynamically after session start)

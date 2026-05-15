@@ -86,8 +86,8 @@ export type BackgroundCancelParamsType = Static<typeof BackgroundCancelParams>;
 
 export const MAX_CONCURRENT_TASKS = Infinity;
 export const MAX_SUBAGENT_DEPTH = 1;
-export const DEPTH_ENV_VAR = "SANEPI_SUBAGENT_DEPTH";
-export const AGENT_TYPE_ENV_VAR = "SANEPI_AGENT_TYPE";
+export const DEPTH_ENV_VAR = "SENPI_SUBAGENT_DEPTH";
+export const AGENT_TYPE_ENV_VAR = "SENPI_AGENT_TYPE";
 export const TASK_ENTRY_TYPE = "background-task.state";
 export const DEFAULT_BLOCK_TIMEOUT = 60000;
 export const MAX_BLOCK_TIMEOUT = 300000;

@@ -1,5 +1,27 @@
 # Core Extensions Changes
 
+## 2026-05-15 - Normalize remaining senpi internal names
+
+### What changed
+
+- `builtin/system-messages.ts`: Renamed the exported conversation constants, event type names, and helper function names to the `SENPI_*` / `Senpi*` spelling, and changed the emitted conversation event name to `senpi:conversation`.
+- `builtin/todotools/system-messages.ts`: Applied the same event-name and constant-name cleanup to the vendored todotools helper.
+- `builtin/todotools/state.ts`: Changed the todo state custom entry type to `senpi.todo-state`.
+- `builtin/background-task/types.ts`: Changed background-agent environment variables to `SENPI_SUBAGENT_DEPTH` and `SENPI_AGENT_TYPE`.
+- `test/suite/senpi-conversation.test.ts`: Renamed the regression test file and assertions to match the senpi runtime naming.
+
+### Why
+
+- The fork identity is `senpi`, and the remaining internal directive/event/state/env names should carry the same identity instead of preserving an earlier spelling.
+
+### Why extension system couldn't handle this alone
+
+- These names are builtin extension wire constants, session custom-entry identifiers, and subprocess environment variables. They must be emitted correctly by the bundled implementation before user or external extensions can observe them.
+
+### Expected merge conflict zones
+
+- LOW: `builtin/system-messages.ts`, `builtin/todotools/system-messages.ts`, `builtin/todotools/state.ts`, and `builtin/background-task/types.ts` if upstream or vendored builtins rename these helper surfaces.
+
 ## 2026-05-14 - Native Web Tool UI Cleanup Hooks
 
 ### What changed
@@ -24,13 +46,13 @@
 
 ### What changed
 
-- `builtin/system-messages.ts`: Changed the injected builtin system-message prefix from `[system:sanepi]` to `[system:senpi]`.
+- `builtin/system-messages.ts`: Changed the injected builtin system-message prefix to `[system:senpi]`.
 - `builtin/todotools/system-messages.ts`: Applied the same prefix change to the vendored todotools helper.
-- `test/suite/sanepi-conversation.test.ts`: Added regression coverage that both helpers emit the `senpi` marker.
+- `test/suite/senpi-conversation.test.ts`: Added regression coverage that both helpers emit the `senpi` marker.
 
 ### Why
 
-- The runtime identity is `senpi`, but internally injected reminder/follow-up messages still used the stale `[system:sanepi]` marker.
+- The runtime identity is `senpi`, so internally injected reminder/follow-up messages should use the matching `[system:senpi]` marker.
 
 ### Why extension system couldn't handle this alone
 

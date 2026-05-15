@@ -27,7 +27,7 @@ import {
 	shouldCompact,
 } from "../src/core/compaction/index.js";
 import compactionExtension from "../src/core/extensions/builtin/compaction/index.js";
-import { SANEPI_SYSTEM_PREFIX } from "../src/core/extensions/builtin/system-messages.js";
+import { SENPI_SYSTEM_PREFIX } from "../src/core/extensions/builtin/system-messages.js";
 import type { ExtensionAPI, ExtensionContext } from "../src/core/extensions/index.js";
 import {
 	buildSessionContext,
@@ -401,7 +401,7 @@ describe("findCutPoint", () => {
 			createMessageEntry(createUserMessage("Turn 2")),
 			createCustomMessageEntry(
 				"background-task.complete",
-				`${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
+				`${SENPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
 			),
 			createMessageEntry(createAssistantMessage("A2-1", createMockUsage(0, 100, 5000, 0))),
 			createMessageEntry(createAssistantMessage("A2-2", createMockUsage(0, 100, 8000, 0))),
@@ -573,7 +573,7 @@ describe("prepareCompaction with previous compaction", () => {
 		const assistant1 = createMessageEntry(createAssistantMessage(firstAssistantText));
 		const reminder = createCustomMessageEntry(
 			"background-task.complete",
-			`${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
+			`${SENPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
 		);
 		const user2 = createMessageEntry(createUserMessage(secondUserText));
 		const assistant2 = createMessageEntry(createAssistantMessage(secondAssistantText, createMockUsage(5000, 500)));
@@ -614,7 +614,7 @@ describe("prepareCompaction with previous compaction", () => {
 		const compaction1 = createCompactionEntry("Previous summary", keptUser.id);
 		const reminder = createCustomMessageEntry(
 			"background-task.complete",
-			`${SANEPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
+			`${SENPI_SYSTEM_PREFIX}\n<system-reminder>\nUse background_output(task_id="bg_123")\n</system-reminder>`,
 		);
 		const latestUser = createMessageEntry(createUserMessage("latest user after reminder ".repeat(20)));
 		const latestAssistant = createMessageEntry(

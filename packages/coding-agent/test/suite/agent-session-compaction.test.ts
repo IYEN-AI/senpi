@@ -1,10 +1,10 @@
 import { type AssistantMessage, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateContextTokens } from "../../src/core/compaction/index.js";
-import { SANEPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
+import { SENPI_SYSTEM_PREFIX } from "../../src/core/extensions/builtin/system-messages.js";
 import { createHarness, type Harness } from "./harness.js";
 
-const BACKGROUND_REMINDER_TEXT = `${SANEPI_SYSTEM_PREFIX}
+const BACKGROUND_REMINDER_TEXT = `${SENPI_SYSTEM_PREFIX}
 <system-reminder>
 Use background_output(task_id="bg_123")
 </system-reminder>`;

@@ -17,11 +17,11 @@
 - What changed: Added sync mappings and documentation for the vendored `todowrite` builtin source.
 - Merge-conflict risk: low. Expected conflict zones are the builtin sync file list, external version manifest, and README builtin tables.
 
-## 2026-04-05 — add `sanepi` CLI alias
+## 2026-04-05 — add `senpi` CLI alias
 
 - Changed: `packages/coding-agent/package.json`
-- Why: The user wants the built CLI to be directly runnable via `sanepi`. This cannot be implemented through the extension system because shell command exposure is controlled by the package `bin` map, not runtime extension hooks.
-- What changed: Added a second CLI bin alias, `sanepi`, pointing at the existing `dist/cli.js` entrypoint alongside `pi`.
+- Why: The user wants the built CLI to be directly runnable via `senpi`. This cannot be implemented through the extension system because shell command exposure is controlled by the package `bin` map, not runtime extension hooks.
+- What changed: Added a second CLI bin alias, `senpi`, pointing at the existing `dist/cli.js` entrypoint alongside `pi`.
 - Merge-conflict risk: low. The only expected conflict zone is the `bin` field in `packages/coding-agent/package.json` if upstream changes CLI entrypoint names or packaging layout.
 
 ## 2026-04-09 — fix stale coding-agent baseline test expectations
@@ -44,7 +44,7 @@
   - `packages/coding-agent/package.json`
   - `package.json`
   - `scripts/create-root-senpi-wrapper.mjs`
-- Why: The user wants root-level `npm run build` to be sufficient in the same practical sense that `sanepi` was: after building, there should be a directly callable `senpi` command, not just an internal package artifact. A plain copied file in root `dist/` was not enough for `which senpi`; the build also needed to refresh a PATH-visible shim.
+- Why: The user wants root-level `npm run build` to be sufficient in the same practical sense that `senpi` was: after building, there should be a directly callable `senpi` command, not just an internal package artifact. A plain copied file in root `dist/` was not enough for `which senpi`; the build also needed to refresh a PATH-visible shim.
 - What changed:
   - Updated the coding-agent `build` script to emit `dist/senpi` alongside `dist/cli.js`.
   - Updated the root `build` script to generate a root `dist/senpi` wrapper that delegates to `packages/coding-agent/dist/cli.js`.
