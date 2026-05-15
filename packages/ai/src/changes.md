@@ -1,5 +1,21 @@
 # AI Source Changes
 
+## 2026-05-15 - Anthropic `onPayload` request headers
+
+### What changed and why
+- `providers/anthropic.ts`: when an `onPayload` hook returns request metadata fields (`headers` / `extra_body`), the provider now forwards string-valued `headers` through the Anthropic SDK request options and strips both metadata keys from the JSON request body.
+- Added a regression test for native computer-use extensions that inject `computer_20250124` plus `anthropic-beta: computer-use-2025-01-24` from `before_provider_request`. Previously the tool reached Anthropic but the beta header did not, producing a 400 where `computer_20250124` was not among the accepted tool tags.
+
+### Files modified
+- `providers/anthropic.ts`
+- `../test/anthropic-on-payload-headers.test.ts`
+
+### Why the higher-level extension system couldn't handle this alone
+- Extensions can mutate the provider payload via `before_provider_request`, but Anthropic SDK request headers are assembled inside `pi-ai`. The provider must explicitly lift hook-added header metadata into SDK request options after `onPayload` runs.
+
+### Expected merge conflict zones
+- LOW: `streamAnthropic()` request construction around the `onPayload` callback and SDK `messages.create()` options.
+
 ## 2026-05-11 - Senpi-branded Codex originator and User-Agent
 
 ### What changed and why

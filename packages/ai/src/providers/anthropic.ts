@@ -35,12 +35,7 @@ import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 
 import { resolveCloudflareBaseUrl } from "./cloudflare.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
-import {
-	ANTHROPIC_RESERVED_BODY_KEYS,
-	adjustMaxTokensForThinking,
-	applyExtraBody,
-	buildBaseOptions,
-} from "./simple-options.js";
+import { ANTHROPIC_RESERVED_BODY_KEYS, adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.js";
 import { transformMessages } from "./transform-messages.js";
 
 /**
@@ -243,10 +238,56 @@ interface ServerSentEvent {
 	raw: string[];
 }
 
+type AnthropicPayloadWithRequestMetadata = MessageCreateParamsStreaming & {
+	headers?: unknown;
+	extra_body?: unknown;
+};
+
 interface SseDecoderState {
 	event: string | null;
 	data: string[];
 	raw: string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+	if (!isRecord(value)) {
+		return undefined;
+	}
+
+	const entries = Object.entries(value);
+	if (entries.some(([, item]) => typeof item !== "string")) {
+		return undefined;
+	}
+
+	return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function extractPayloadRequestMetadata(params: MessageCreateParamsStreaming): {
+	params: MessageCreateParamsStreaming;
+	headers?: Record<string, string>;
+} {
+	const payload = params as AnthropicPayloadWithRequestMetadata;
+	const headers = stringRecord(payload.headers);
+
+	if (!("headers" in payload) && !("extra_body" in payload)) {
+		return headers ? { params, headers } : { params };
+	}
+
+	const stripped: AnthropicPayloadWithRequestMetadata = { ...payload };
+	delete stripped.headers;
+	delete stripped.extra_body;
+
+	return headers ? { params: stripped, headers } : { params: stripped };
+}
+
+function isCacheableUserContentBlock(
+	block: ContentBlockParam | undefined,
+): block is Extract<ContentBlockParam, { type: "text" | "image" | "tool_result" }> {
+	return block?.type === "text" || block?.type === "image" || block?.type === "tool_result";
 }
 
 const ANTHROPIC_MESSAGE_EVENTS: ReadonlySet<string> = new Set([
@@ -494,20 +535,23 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			if (nextParams !== undefined) {
 				params = nextParams as MessageCreateParamsStreaming;
 			}
+			const payloadRequestMetadata = extractPayloadRequestMetadata(params);
+			params = payloadRequestMetadata.params;
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
 				...(options?.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+				...(payloadRequestMetadata.headers ? { headers: payloadRequestMetadata.headers } : {}),
 			};
 			const response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			stream.push({ type: "start", partial: output });
 
 			type Block =
-				| (ThinkingContent & { index: number })
-				| (TextContent & { index: number })
-				| ((ToolCall & { partialJson: string }) & { index: number })
-				| (ProviderNativeContent & { index: number });
+				| (ThinkingContent & { index?: number })
+				| (TextContent & { index?: number })
+				| ((ToolCall & { partialJson: string }) & { index?: number })
+				| (ProviderNativeContent & { index?: number });
 			const blocks = output.content as Block[];
 
 			for await (const event of iterateAnthropicEvents(response, options?.signal)) {
@@ -558,7 +602,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 							name: isOAuth
 								? fromClaudeCodeName(event.content_block.name, context.tools)
 								: event.content_block.name,
-							arguments: (event.content_block.input as Record<string, any>) ?? {},
+							arguments: isRecord(event.content_block.input) ? event.content_block.input : {},
 							partialJson: "",
 							index: event.index,
 						};
@@ -624,7 +668,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					const index = blocks.findIndex((b) => b.index === event.index);
 					const block = blocks[index];
 					if (block) {
-						delete (block as any).index;
+						delete block.index;
 						if (block.type === "text") {
 							stream.push({
 								type: "text_end",
@@ -1008,9 +1052,20 @@ function buildParams(
 		}
 	}
 
-	applyExtraBody(params as unknown as Record<string, unknown>, options?.extraBody, ANTHROPIC_RESERVED_BODY_KEYS);
+	applyExtraBodyToAnthropicParams(params, options?.extraBody);
 
 	return params;
+}
+
+function applyExtraBodyToAnthropicParams(
+	params: MessageCreateParamsStreaming,
+	extraBody: Record<string, unknown> | undefined,
+): void {
+	if (!extraBody) return;
+	for (const [key, value] of Object.entries(extraBody)) {
+		if (ANTHROPIC_RESERVED_BODY_KEYS.has(key)) continue;
+		Object.defineProperty(params, key, { value, writable: true, enumerable: true, configurable: true });
+	}
 }
 
 // Normalize tool call IDs to match Anthropic's required pattern and length
@@ -1162,11 +1217,8 @@ function convertMessages(
 		if (lastMessage.role === "user") {
 			if (Array.isArray(lastMessage.content)) {
 				const lastBlock = lastMessage.content[lastMessage.content.length - 1];
-				if (
-					lastBlock &&
-					(lastBlock.type === "text" || lastBlock.type === "image" || lastBlock.type === "tool_result")
-				) {
-					(lastBlock as any).cache_control = cacheControl;
+				if (isCacheableUserContentBlock(lastBlock)) {
+					lastBlock.cache_control = cacheControl;
 				}
 			} else if (typeof lastMessage.content === "string") {
 				lastMessage.content = [
@@ -1175,7 +1227,7 @@ function convertMessages(
 						text: lastMessage.content,
 						cache_control: cacheControl,
 					},
-				] as any;
+				];
 			}
 		}
 	}
