@@ -69,7 +69,15 @@ export const streamMistral: StreamFunction<"mistral-conversations", MistralOptio
 			});
 
 			const normalizeMistralToolCallId = createMistralToolCallIdNormalizer();
-			const transformedMessages = transformMessages(context.messages, model, (id) => normalizeMistralToolCallId(id));
+			const preserveThinking = options?.promptMode === "reasoning" || options?.reasoningEffort !== undefined;
+			const transformedMessages = transformMessages(
+				context.messages,
+				model,
+				(id) => normalizeMistralToolCallId(id),
+				{
+					preserveThinking,
+				},
+			);
 
 			let payload = buildChatPayload(model, context, transformedMessages, options);
 			const nextPayload = await options?.onPayload?.(payload, model);
@@ -264,7 +272,7 @@ function buildChatPayload(
 		});
 	}
 
-	applyExtraBody(payload as unknown as Record<string, unknown>, options?.extraBody, MISTRAL_RESERVED_BODY_KEYS);
+	applyExtraBody(payload, options?.extraBody, MISTRAL_RESERVED_BODY_KEYS);
 
 	return payload;
 }
@@ -613,7 +621,7 @@ function mapToolChoice(
 ): "auto" | "none" | "any" | "required" | { type: "function"; function: { name: string } } | undefined {
 	if (!choice) return undefined;
 	if (choice === "auto" || choice === "none" || choice === "any" || choice === "required") {
-		return choice as any;
+		return choice;
 	}
 	return {
 		type: "function",

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamSimple } from "../src/stream.js";
-import type { Context, Model, SimpleStreamOptions } from "../src/types.js";
+import type { AssistantMessage, Context, Model, SimpleStreamOptions } from "../src/types.js";
 
 interface MistralPayload {
 	promptMode?: "reasoning";
 	reasoningEffort?: "none" | "high";
+	messages?: Array<{ role?: string; content?: unknown }>;
 }
 
 function makeContext(): Context {
@@ -17,6 +18,7 @@ function makeContext(): Context {
 async function capturePayload(
 	model: Model<"mistral-conversations">,
 	options?: SimpleStreamOptions,
+	context: Context = makeContext(),
 ): Promise<MistralPayload> {
 	let capturedPayload: MistralPayload | undefined;
 	const payloadCaptureModel: Model<"mistral-conversations"> = {
@@ -24,7 +26,7 @@ async function capturePayload(
 		baseUrl: "http://127.0.0.1:9",
 	};
 
-	const stream = streamSimple(payloadCaptureModel, makeContext(), {
+	const stream = streamSimple(payloadCaptureModel, context, {
 		...options,
 		apiKey: "fake-key",
 		onPayload: (payload) => {
@@ -76,5 +78,39 @@ describe("Mistral reasoning mode selection", () => {
 
 		expect(payload.reasoningEffort).toBeUndefined();
 		expect(payload.promptMode).toBeUndefined();
+	});
+
+	it("omits standalone same-model thinking replay when thinking is off", async () => {
+		const model = getModel("mistral", "mistral-medium-3.5");
+		const previousAssistant: AssistantMessage = {
+			role: "assistant",
+			api: "mistral-conversations",
+			provider: "mistral",
+			model: model.id,
+			content: [
+				{ type: "thinking", thinking: "prior reasoning" },
+				{ type: "text", text: "previous answer" },
+			],
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		};
+		const payload = await capturePayload(model, undefined, {
+			messages: [
+				{ role: "user", content: "first turn", timestamp: Date.now() },
+				previousAssistant,
+				{ role: "user", content: "follow-up", timestamp: Date.now() },
+			],
+		});
+
+		const assistantMessage = payload.messages?.find((message) => message.role === "assistant");
+		expect(JSON.stringify(assistantMessage?.content)).not.toContain('"type":"thinking"');
 	});
 });
