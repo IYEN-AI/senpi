@@ -1,5 +1,25 @@
 # changes.md — dynamic-prompt
 
+## Test discipline rules in verification prompt (2026-05-15)
+
+### What changed
+
+- `verification.ts`: added a structured `TEST_DISCIPLINE_RULES` set and renders it as a dedicated `### Test Discipline` subsection inside `## Verification`.
+- Added semantic rule coverage under `test/suite/prompt-verification-discipline.test.ts`, avoiding raw prompt sentence pinning while still checking that the structured rule set is injected.
+
+### Why
+
+- The shared verification prompt did not tell agents how to handle test code specifically. That left room for flaky waits, fixed sleep-based async tests, over-isolated mocks, and prompt tests that merely assert current prompt text.
+- The new rules live in `verification.ts` because they define validation quality, not model-family tuning.
+
+### Why extension system couldn't handle this
+
+- This is shared base-prompt behavior for every preset and fallback prompt. Per-extension prompt riders would apply too late or only in specific extension configurations.
+
+### Expected merge conflict zones
+
+- LOW: `verification.ts` if upstream rewrites the V1/V2/V3 verification section.
+
 ## Dynamic System Prompt (2026-04-05)
 
 ### What changed
