@@ -1,7 +1,7 @@
 import type { TUI } from "../tui.js";
 import { Text } from "./text.js";
 
-export type LoaderMessageFormatter = (message: string, frameIndex: number) => string;
+export type LoaderMessageFormatter = (message: string, animationElapsedMs: number) => string;
 
 export interface LoaderIndicatorOptions {
 	/** Animation frames. Use an empty array to hide the indicator. */
@@ -24,11 +24,11 @@ export class Loader extends Text {
 	private frames = [...DEFAULT_FRAMES];
 	private intervalMs = DEFAULT_INTERVAL_MS;
 	private currentFrame = 0;
-	private currentMessageFrame = 0;
 	private indicatorIntervalId: NodeJS.Timeout | null = null;
 	private messageIntervalId: NodeJS.Timeout | null = null;
 	private messageFormatter: LoaderMessageFormatter | undefined = undefined;
 	private messageIntervalMs = DEFAULT_INTERVAL_MS;
+	private messageAnimationStartedAt = 0;
 	private ui: TUI | null = null;
 	private renderIndicatorVerbatim = false;
 
@@ -49,6 +49,9 @@ export class Loader extends Text {
 	}
 
 	start(): void {
+		if (this.messageFormatter) {
+			this.messageAnimationStartedAt = Date.now();
+		}
 		this.updateDisplay();
 		this.restartAnimation();
 	}
@@ -79,7 +82,7 @@ export class Loader extends Text {
 				? indicator.messageIntervalMs
 				: this.intervalMs;
 		this.currentFrame = 0;
-		this.currentMessageFrame = 0;
+		this.messageAnimationStartedAt = Date.now();
 		this.start();
 	}
 
@@ -92,8 +95,8 @@ export class Loader extends Text {
 			}, this.intervalMs);
 		}
 		if (this.messageFormatter) {
+			this.messageAnimationStartedAt = Date.now();
 			this.messageIntervalId = setInterval(() => {
-				this.currentMessageFrame += 1;
 				this.updateDisplay();
 			}, this.messageIntervalMs);
 		}
@@ -103,8 +106,9 @@ export class Loader extends Text {
 		const frame = this.frames[this.currentFrame] ?? "";
 		const renderedFrame = this.renderIndicatorVerbatim ? frame : this.spinnerColorFn(frame);
 		const indicator = frame.length > 0 ? `${renderedFrame} ` : "";
+		const animationElapsedMs = Math.max(0, Date.now() - this.messageAnimationStartedAt);
 		const renderedMessage = this.messageFormatter
-			? this.messageFormatter(this.message, this.currentMessageFrame)
+			? this.messageFormatter(this.message, animationElapsedMs)
 			: this.messageColorFn(this.message);
 		this.setText(`${indicator}${renderedMessage}`);
 		if (this.ui) {

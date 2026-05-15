@@ -4,7 +4,7 @@ import { Loader, TUI } from "../src/index.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
 
 describe("Loader", () => {
-	it("uses a message formatter with the current animation frame", () => {
+	it("uses a message formatter with elapsed animation time", () => {
 		const terminal = new VirtualTerminal(40, 4);
 		const tui = new TUI(terminal);
 		const loader = new Loader(
@@ -14,13 +14,13 @@ describe("Loader", () => {
 			"Working",
 			{
 				frames: ["•"],
-				messageFormatter: (message, frameIndex) => `[${frameIndex}]${message}`,
+				messageFormatter: (message, animationElapsedMs) => `[${Number.isFinite(animationElapsedMs)}]${message}`,
 			},
 		);
 
 		loader.stop();
 
 		const renderedLine = loader.render(40)[1];
-		assert.ok(renderedLine?.includes("• [0]Working"), `expected formatted loader line, got ${renderedLine}`);
+		assert.ok(renderedLine?.includes("• [true]Working"), `expected formatted loader line, got ${renderedLine}`);
 	});
 });
