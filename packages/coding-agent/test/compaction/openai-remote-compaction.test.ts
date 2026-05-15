@@ -1,11 +1,16 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_COMPACTION_SETTINGS } from "../../src/core/compaction/index.js";
 import {
 	buildOpenAiRemoteCompactionResult,
+	buildOpenAiResponsesStreamCompactionResult,
 	createOpenAiRemoteCompactionRequest,
+	createOpenAiResponsesStreamCompactionPayload,
 	OPENAI_REMOTE_COMPACTION_SCHEMA,
 	rewriteOpenAiPayloadWithRemoteCompaction,
+	runOpenAiRemoteCompaction,
 } from "../../src/core/extensions/builtin/compaction/openai-remote.js";
+import type { SessionBeforeCompactEvent } from "../../src/core/extensions/types.js";
 import type { SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.js";
 
 const OPENAI_MODEL = {
@@ -86,6 +91,26 @@ function openAiBranch(): SessionEntry[] {
 	];
 }
 
+function compactionEvent(branchEntries: SessionEntry[]): SessionBeforeCompactEvent {
+	return {
+		type: "session_before_compact",
+		reason: "threshold",
+		willRetry: true,
+		requestId: "remote-test-request",
+		preparation: {
+			firstKeptEntryId: "u2",
+			messagesToSummarize: [],
+			turnPrefixMessages: [],
+			isSplitTurn: false,
+			tokensBefore: 1234,
+			fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+			settings: DEFAULT_COMPACTION_SETTINGS,
+		},
+		branchEntries,
+		signal: new AbortController().signal,
+	};
+}
+
 describe("OpenAI remote compaction", () => {
 	it("builds a compact request only when every context message is OpenAI Responses-compatible", () => {
 		const request = createOpenAiRemoteCompactionRequest({
@@ -93,7 +118,7 @@ describe("OpenAI remote compaction", () => {
 			systemPrompt: "You are senpi.",
 			branchEntries: openAiBranch(),
 			tokensBefore: 1234,
-			serviceTier: "priority",
+			serviceTier: "priority" as const,
 		});
 
 		expect(request?.body.model).toBe("gpt-5.4");
@@ -118,6 +143,132 @@ describe("OpenAI remote compaction", () => {
 			},
 			{ type: "function_call_output", call_id: "call_build", output: "Tests passed." },
 			{ role: "user", content: [{ type: "input_text", text: "Great. Commit it." }] },
+		]);
+	});
+
+	it("builds a Codex-style Responses WebSocket compaction payload", () => {
+		const request = createOpenAiRemoteCompactionRequest({
+			model: OPENAI_MODEL,
+			systemPrompt: "You are senpi.",
+			branchEntries: openAiBranch(),
+			tokensBefore: 1234,
+			promptCacheKey: "session-1",
+			serviceTier: "priority",
+		});
+
+		expect(request).toBeDefined();
+		if (!request) return;
+
+		const payload = createOpenAiResponsesStreamCompactionPayload(
+			{
+				model: "gpt-5.4",
+				input: [{ role: "developer", content: "current system prompt" }],
+				stream: true,
+			},
+			request,
+		);
+
+		expect(payload).toMatchObject({
+			model: "gpt-5.4",
+			prompt_cache_key: "session-1",
+			service_tier: "priority",
+			input: [
+				{ role: "developer", content: "current system prompt" },
+				{ role: "user", content: [{ type: "input_text", text: "Please inspect the build." }] },
+				{
+					type: "message",
+					role: "assistant",
+					status: "completed",
+					id: "msg_1",
+					phase: "commentary",
+					content: [{ type: "output_text", text: "I will inspect it.", annotations: [] }],
+				},
+				{
+					type: "function_call",
+					id: "fc_build",
+					call_id: "call_build",
+					name: "bash",
+					arguments: '{"cmd":"npm test"}',
+				},
+				{ type: "function_call_output", call_id: "call_build", output: "Tests passed." },
+				{ role: "user", content: [{ type: "input_text", text: "Great. Commit it." }] },
+				{ type: "context_compaction" },
+			],
+			stream: true,
+		});
+	});
+
+	it("uses the Responses WebSocket compaction route before the compact endpoint", async () => {
+		const emitted: unknown[] = [];
+		const capturedPayloads: unknown[] = [];
+		const ctx = {
+			model: OPENAI_MODEL,
+			serviceTier: "priority" as const,
+			modelRegistry: {
+				getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }),
+			},
+			sessionManager: { getSessionId: () => "session-1" },
+			getSystemPrompt: () => "You are senpi.",
+		};
+
+		const result = await runOpenAiRemoteCompaction(
+			ctx,
+			compactionEvent(openAiBranch()),
+			(event) => emitted.push(event),
+			{
+				fetch: async () => {
+					throw new Error("compact endpoint should not be called when websocket compaction succeeds");
+				},
+				now: () => 1_775_000_001_000,
+				streamRunner: (_model, _context, options) => ({
+					result: async () => {
+						const payload = await options.onPayload?.(
+							{
+								model: "gpt-5.4",
+								input: [{ role: "developer", content: "current system prompt" }],
+								stream: true,
+							},
+							OPENAI_MODEL,
+						);
+						capturedPayloads.push(payload);
+						return {
+							role: "assistant",
+							api: "openai-responses",
+							provider: "openai",
+							model: "gpt-5.4",
+							responseId: "resp_ws_compact",
+							content: [
+								{
+									type: "providerNative",
+									subtype: "context_compaction",
+									raw: { type: "context_compaction", encrypted_content: "encrypted-websocket-summary" },
+								},
+							],
+							usage: {
+								input: 1000,
+								output: 50,
+								cacheRead: 0,
+								cacheWrite: 0,
+								totalTokens: 1050,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+							},
+							stopReason: "stop",
+							timestamp: 1_775_000_001_000,
+						} satisfies AssistantMessage;
+					},
+				}),
+			},
+		);
+
+		expect(result?.details.transport).toBe("websocket");
+		expect(capturedPayloads).toHaveLength(1);
+		expect(capturedPayloads[0]).toMatchObject({
+			service_tier: "priority",
+			input: expect.arrayContaining([{ type: "context_compaction" }]),
+		});
+		expect(emitted).toMatchObject([
+			{ action: "remote_started", transport: "websocket" },
+			{ action: "remote_completed", transport: "websocket" },
 		]);
 	});
 
@@ -188,6 +339,57 @@ describe("OpenAI remote compaction", () => {
 				content: [{ type: "input_text", text: "Please inspect the build." }],
 			},
 			{ type: "compaction", id: "cmp_1", encrypted_content: "encrypted-summary" },
+		]);
+	});
+
+	it("stores Responses WebSocket context_compaction output in result details for replay", () => {
+		const response = {
+			role: "assistant",
+			api: "openai-responses",
+			provider: "openai",
+			model: "gpt-5.4",
+			responseId: "resp_ws_compact",
+			content: [
+				{
+					type: "providerNative",
+					subtype: "context_compaction",
+					raw: { type: "context_compaction", encrypted_content: "encrypted-websocket-summary" },
+				},
+			],
+			usage: {
+				input: 1000,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 1050,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 1_775_000_001_000,
+		} satisfies AssistantMessage;
+
+		const result = buildOpenAiResponsesStreamCompactionResult({
+			model: OPENAI_MODEL,
+			firstKeptEntryId: "u2",
+			tokensBefore: 1234,
+			requestInput:
+				createOpenAiRemoteCompactionRequest({
+					model: OPENAI_MODEL,
+					systemPrompt: "You are senpi.",
+					branchEntries: openAiBranch(),
+					tokensBefore: 1234,
+				})?.body.input ?? [],
+			response,
+			now: () => 1_775_000_001_000,
+		});
+
+		expect(result.summary).toContain("Responses WebSocket");
+		expect(result.details.transport).toBe("websocket");
+		expect(result.details.requestInputItemCount).toBe(5);
+		expect(result.details.replacementInput).toEqual([
+			{ role: "user", content: [{ type: "input_text", text: "Please inspect the build." }] },
+			{ role: "user", content: [{ type: "input_text", text: "Great. Commit it." }] },
+			{ type: "context_compaction", encrypted_content: "encrypted-websocket-summary" },
 		]);
 	});
 
