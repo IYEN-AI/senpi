@@ -389,6 +389,19 @@ export class AgentSession {
 
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 		this._installAgentToolHooks();
+		const previousPrepareNextTurn = this.agent.prepareNextTurn;
+		this.agent.prepareNextTurn = async (signal) => {
+			const nextTurn = await previousPrepareNextTurn?.(signal);
+			const model = this.agent.state.model;
+			if (!model) {
+				return nextTurn;
+			}
+			return {
+				...nextTurn,
+				model,
+				thinkingLevel: this.agent.state.thinkingLevel,
+			};
+		};
 
 		this._buildRuntime({
 			activeToolNames: this._initialActiveToolNames,

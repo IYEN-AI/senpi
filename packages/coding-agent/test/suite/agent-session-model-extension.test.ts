@@ -44,6 +44,64 @@ describe("AgentSession model and extension characterization", () => {
 		).toEqual([`${nextModel.provider}/${nextModel.id}`]);
 	});
 
+	it("uses a newly selected model for queued steering after the active turn finishes", async () => {
+		// given
+		let releaseToolExecution!: () => void;
+		const toolReleased = new Promise<void>((resolve) => {
+			releaseToolExecution = resolve;
+		});
+		const waitTool: AgentTool = {
+			name: "wait",
+			label: "Wait",
+			description: "Wait until the test releases the active turn",
+			parameters: Type.Object({}),
+			execute: async () => {
+				await toolReleased;
+				return { content: [{ type: "text", text: "released" }], details: {} };
+			},
+		};
+		const harness = await createHarness({
+			models: [
+				{ id: "faux-1", name: "One", reasoning: true },
+				{ id: "faux-2", name: "Two", reasoning: true },
+			],
+			tools: [waitTool],
+		});
+		harnesses.push(harness);
+		const nextModel = harness.getModel("faux-2");
+		if (!nextModel) throw new Error("missing faux-2");
+		const waitForToolStart = new Promise<void>((resolve) => {
+			const unsubscribe = harness.session.subscribe((event) => {
+				if (event.type === "tool_execution_start" && event.toolName === "wait") {
+					unsubscribe();
+					resolve();
+				}
+			});
+		});
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
+			(_context, _options, _state, model) =>
+				model.id === "faux-2"
+					? fauxAssistantMessage("continued on the selected model")
+					: fauxAssistantMessage("", { stopReason: "error", errorMessage: "400 status code (no body)" }),
+		]);
+
+		// when
+		const promptPromise = harness.session.prompt("start");
+		await waitForToolStart;
+		await harness.session.setModel(nextModel);
+		await harness.session.prompt("queued after switch", { streamingBehavior: "steer" });
+		releaseToolExecution();
+		await promptPromise;
+
+		// then
+		expect(harness.faux.getCallLog().map((call) => call.modelId)).toEqual(["faux-1", "faux-2"]);
+		expect(getAssistantTexts(harness)).toContain("continued on the selected model");
+		expect(
+			harness.session.messages.filter((message) => message.role === "assistant" && message.stopReason === "error"),
+		).toEqual([]);
+	});
+
 	it("cycles through favorite models and preserves the favorite thinking preference", async () => {
 		const harness = await createHarness({
 			models: [
