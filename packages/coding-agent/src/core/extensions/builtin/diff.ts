@@ -32,7 +32,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			if (!result.stdout || !result.stdout.trim()) {
+			if (!result.stdout?.trim()) {
 				ctx.ui.notify("No changes in working tree", "info");
 				return;
 			}
