@@ -17,16 +17,29 @@ A TUI needs exclusive ownership of the terminal: raw mode, alternate screen, Kit
 ## Run
 
 ```bash
-# Dev:
-SENPI_NEO_TUI_DEV=1 cargo run --bin senpi-neo-tui
+# Dev: render the bundled demo scene at the current terminal size.
+cargo run --package senpi-neo-tui -- --demo --demo-seconds 5
 
-# Faux backend for offline QA:
-cargo run --bin senpi-neo-faux -- streaming
+# Via the senpi CLI (Node TS dispatch -> Rust binary):
+SENPI_NEO_TUI_DEV=1 node packages/coding-agent/dist/cli.js --neo --demo --demo-seconds 5
 ```
+
+The full faux RPC backend (`bin/senpi-neo-faux`) is planned for T6; the offline
+scenario harness lands with it.
 
 ## Architecture
 
-See [plans/neo-tui.md](../../plans/neo-tui.md) for the full plan and dependency graph.
+Process tree at runtime:
+
+```
+shell
+└── node senpi --neo                  # transient parent
+    └── senpi-neo-tui                 # Rust binary (owns TTY)
+        └── node senpi --mode rpc     # backend (T6)
+```
+
+Module layout matches the `Layout` section below; per-module roles and the
+testing matrix live in [`AGENTS.md`](./AGENTS.md).
 
 Process tree at runtime:
 

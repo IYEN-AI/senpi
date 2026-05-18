@@ -86,7 +86,6 @@ cargo fmt --package senpi-neo-tui -- --check
 - Calling `terminal.draw` outside the render task or skipping it when state changes.
 - Failing to restore terminal state on panic.
 - Killing the tmux server in QA scripts.
-- Committing `Cargo.lock` for a binary that is workspace-managed.
 
 ## INTEGRATION POINTS
 

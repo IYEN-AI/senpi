@@ -51,10 +51,29 @@ pub async fn run(config: AppConfig) -> Result<()> {
 
 fn init_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     enable_raw_mode()?;
+    // From this point on every fallible call must roll back raw mode on
+    // failure, otherwise a botched init leaves the shell unusable after
+    // we return the error up to main.
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    if let Err(err) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+        let _ = disable_raw_mode();
+        return Err(err.into());
+    }
     let backend = CrosstermBackend::new(stdout);
-    Ok(Terminal::new(backend)?)
+    match Terminal::new(backend) {
+        Ok(term) => Ok(term),
+        Err(err) => {
+            // Best-effort rollback. Errors here can't be reported any better
+            // than the caller-facing init failure we're about to return.
+            let _ = execute!(
+                std::io::stdout(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            );
+            let _ = disable_raw_mode();
+            Err(err.into())
+        }
+    }
 }
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
@@ -149,7 +168,9 @@ fn draw(
         area,
         LayoutState {
             input_lines: u16::try_from(line_count).unwrap_or(1),
-            sidebar_visible: false,
+            // Auto-show the sidebar on wide terminals; the layout module
+            // additionally clamps it off below 120 cols (its responsibility).
+            sidebar_visible: area.width >= layout::SIDEBAR_MIN_TERMINAL_WIDTH,
         },
     );
 

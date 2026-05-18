@@ -33,7 +33,10 @@ impl Default for LayoutState {
 const HEADER_HEIGHT: u16 = 3;
 const FOOTER_HEIGHT: u16 = 1;
 const SIDEBAR_WIDTH: u16 = 42;
-const SIDEBAR_MIN_TERMINAL_WIDTH: u16 = 120;
+/// Minimum terminal width at which the sidebar surfaces. Exposed so the
+/// app loop can flip `LayoutState::sidebar_visible` in step with the
+/// layout module's own clamp.
+pub const SIDEBAR_MIN_TERMINAL_WIDTH: u16 = 120;
 const INPUT_FRAME_OVERHEAD: u16 = 2; // 1 top border + 1 status row
 const MIN_INPUT_HEIGHT: u16 = 1 + INPUT_FRAME_OVERHEAD;
 const MAX_INPUT_HEIGHT: u16 = 7 + INPUT_FRAME_OVERHEAD;

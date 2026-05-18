@@ -11,6 +11,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -45,13 +46,20 @@ function resolveBinaryPath(): { path: string; source: string } | undefined {
 	const { platform, arch, exe } = platformInfo();
 	const fileName = `senpi-neo-tui-${platform}-${arch}${exe}`;
 
-	// 1. Production: alongside the dist/cli.js script.
+	// 1. Explicit override wins over everything else - that is what makes
+	//    it an override.
+	const override = process.env.SENPI_NEO_TUI_BIN;
+	if (override && existsSync(override)) {
+		return { path: override, source: "SENPI_NEO_TUI_BIN" };
+	}
+
+	// 2. Production: alongside the dist/cli.js script.
 	const distPath = resolve(SCRIPT_DIR, "..", "neo-tui-bin", fileName);
 	if (existsSync(distPath)) {
 		return { path: distPath, source: "dist" };
 	}
 
-	// 2. Dev: target/{release,debug}/senpi-neo-tui in the workspace tree.
+	// 3. Dev: target/{release,debug}/senpi-neo-tui in the workspace tree.
 	if (process.env.SENPI_NEO_TUI_DEV === "1") {
 		const repoRoot = resolve(SCRIPT_DIR, "..", "..", "..", "..");
 		const releasePath = resolve(repoRoot, "target", "release", `senpi-neo-tui${exe}`);
@@ -62,12 +70,6 @@ function resolveBinaryPath(): { path: string; source: string } | undefined {
 		if (existsSync(debugPath)) {
 			return { path: debugPath, source: "target/debug" };
 		}
-	}
-
-	// 3. Explicit override.
-	const override = process.env.SENPI_NEO_TUI_BIN;
-	if (override && existsSync(override)) {
-		return { path: override, source: "SENPI_NEO_TUI_BIN" };
 	}
 
 	return undefined;
@@ -135,11 +137,10 @@ export async function runNeoMode(options: RunNeoModeOptions): Promise<number> {
 }
 
 function signalNumber(signal: NodeJS.Signals): number | undefined {
-	const map: Record<string, number> = {
-		SIGHUP: 1,
-		SIGINT: 2,
-		SIGQUIT: 3,
-		SIGTERM: 15,
-	};
-	return map[signal];
+	// node ships a full POSIX signal -> number table in os.constants.signals
+	// (SIGKILL=9, SIGSEGV=11, SIGUSR1=10, and so on). Reuse it instead of
+	// maintaining a hand-rolled map that drops everything outside the
+	// happy path.
+	const signals = osConstants.signals as Readonly<Record<string, number>>;
+	return signals[signal];
 }

@@ -2,8 +2,8 @@
 
 Live captures of `senpi --neo` (Rust + ratatui frontend) running the bundled
 demo scene in tmux. The TUI auto-adapts: header / chat / input / footer at every
-size, sidebar surfaces at ≥120 columns, knight-rider streaming bar and braille
-spinner animate at 30 fps.
+size and a braille spinner animates in the footer at ~12 fps. Sidebar /
+streaming bar / palette overlays land in follow-up tasks (T10, T14, T15).
 
 | File | Viewport | Notes |
 | --- | --- | --- |

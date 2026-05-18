@@ -58,6 +58,7 @@ pub enum FocusMode {
 
 /// On-disk keymap spec.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KeymapSpec {
     #[serde(default)]
     pub leader: Option<String>,

@@ -460,6 +460,13 @@ export async function main(args: string[], options?: MainOptions) {
 		takeOverStdout();
 	}
 
+	// `--version` always wins so `senpi --neo --version` still prints the
+	// version and exits without launching the Rust binary.
+	if (parsed.version) {
+		console.log(VERSION);
+		process.exit(0);
+	}
+
 	// --neo: hand the TTY off to the native Rust ratatui binary and exit
 	// with its status. We do this before runtime/session/auth setup so the
 	// binary boots fast and owns the terminal cleanly.
@@ -470,11 +477,6 @@ export async function main(args: string[], options?: MainOptions) {
 			senpiBin: process.execPath,
 		});
 		process.exit(code);
-	}
-
-	if (parsed.version) {
-		console.log(VERSION);
-		process.exit(0);
 	}
 
 	if (parsed.export) {

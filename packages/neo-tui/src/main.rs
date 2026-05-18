@@ -91,7 +91,10 @@ fn real_main() -> Result<()> {
         },
         input_placeholder: "type your prompt here ".into(),
         demo_mode: cli.demo,
-        demo_seconds: (cli.demo_seconds > 0).then_some(cli.demo_seconds),
+        // demo_seconds is a demo-mode option; outside demo mode we ignore
+        // it so a stray `--demo-seconds 5` does not auto-exit a real
+        // session.
+        demo_seconds: (cli.demo && cli.demo_seconds > 0).then_some(cli.demo_seconds),
     };
 
     let runtime = tokio::runtime::Builder::new_current_thread()

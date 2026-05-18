@@ -196,6 +196,14 @@ pub fn resolve(spec: &ThemeSpec) -> Result<ResolvedTheme, ThemeError> {
     let mut colors: BTreeMap<Token, Color> = BTreeMap::new();
     for (key, raw_value) in &spec.tokens {
         let Some(token) = parse_token_name(key) else {
+            // Silent skips let theme typos slip through unnoticed. Emit a
+            // warning on stderr so themers get fast feedback; once a
+            // tracing subscriber is installed (T16) this becomes a
+            // structured event instead.
+            eprintln!(
+                "senpi-neo-tui: warning: ignoring unknown theme token `{key}` (theme `{}`)",
+                spec.name
+            );
             continue;
         };
         let hex = hex_string_for(raw_value, &spec.defs)?;

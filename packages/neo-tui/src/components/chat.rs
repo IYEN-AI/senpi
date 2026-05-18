@@ -46,6 +46,12 @@ pub enum ToolStatus {
 #[derive(Clone, Debug, Default)]
 pub struct ChatState {
     pub messages: Vec<Message>,
+    /// Vertical line offset applied to the rendered chat paragraph.
+    /// `None` (the default) means "stick to the bottom" - the renderer
+    /// computes the offset that pins the last line just above the input
+    /// frame. `Some(n)` clamps the view to that absolute line and is
+    /// driven by scroll keybinds (`ScrollUp` / `ScrollDown` / page keys).
+    pub scroll_offset: Option<u16>,
 }
 
 /// Render the chat list into the given rect.
@@ -72,7 +78,18 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, theme: &ResolvedTheme, state: &
         lines.push(empty_state_line(theme));
     }
 
-    let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+    // Long chats need to scroll: pin to the bottom by default so the
+    // newest line is always visible, and honour an explicit offset
+    // (clamped to the bottom anchor) when the user has scrolled up.
+    let line_total = u16::try_from(lines.len()).unwrap_or(u16::MAX);
+    let bottom_anchor = line_total.saturating_sub(inner.height);
+    let scroll = state
+        .scroll_offset
+        .map_or(bottom_anchor, |raw| raw.min(bottom_anchor));
+
+    let para = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .scroll((scroll, 0));
     frame.render_widget(para, inner);
 }
 
@@ -171,6 +188,7 @@ fn empty_state_line(theme: &ResolvedTheme) -> Line<'static> {
 #[must_use]
 pub fn sample() -> ChatState {
     ChatState {
+        scroll_offset: None,
         messages: vec![
             Message {
                 role: Role::System,
