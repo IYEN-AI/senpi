@@ -1,15 +1,21 @@
 //! `senpi-neo-tui` binary entry.
-//!
-//! Invoked by Node-side `senpi --neo`. Owns the terminal directly, then spawns
-//! `senpi --mode rpc` as a child for the agent backend.
-//!
-//! The current build only prints the CLI surface. Real run loop lands in T16.
 
-use std::process::ExitCode;
+use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser;
+use color_eyre::eyre::{Context, Result};
 
-/// CLI for `senpi-neo-tui`.
+use senpi_neo_tui::{
+    DEFAULT_DARK_THEME_JSON,
+    app::{self, AppConfig},
+    components::{
+        chat,
+        footer::{FooterState, Status},
+        header::HeaderState,
+    },
+    theme,
+};
+
 #[derive(Debug, Parser)]
 #[command(
     name = "senpi-neo-tui",
@@ -17,54 +23,82 @@ use clap::Parser;
     about = "Native Rust + ratatui TUI for senpi (launched via `senpi --neo`)."
 )]
 struct Cli {
-    /// Path to the senpi backend binary to spawn for `--mode rpc`.
-    ///
-    /// Defaults to the value of `$SENPI_NEO_BACKEND_BIN`, then falls back to
-    /// `senpi` resolved from `$PATH`.
+    /// Path to senpi backend binary for `--mode rpc`. Currently unused;
+    /// the demo render does not spawn a backend.
     #[arg(long, env = "SENPI_NEO_BACKEND_BIN")]
-    backend_bin: Option<String>,
+    backend_bin: Option<PathBuf>,
 
-    /// Forwarded argv for the backend, JSON-encoded.
-    ///
-    /// `senpi --neo --provider anthropic` passes
-    /// `["--provider", "anthropic"]` here.
+    /// JSON array of args to forward to the backend. Currently unused.
     #[arg(long, env = "SENPI_NEO_BACKEND_ARGS", default_value = "[]")]
     backend_args: String,
 
-    /// Path to user keymap override (JSON).
-    #[arg(long, env = "SENPI_NEO_KEYMAP")]
-    keymap: Option<String>,
+    /// Render the canned demo state and exit after `--demo-seconds`.
+    #[arg(long, env = "SENPI_NEO_DEMO", default_value_t = false)]
+    demo: bool,
 
-    /// Path to user theme override (JSON).
+    /// Demo deadline in seconds (only with --demo). 0 = render until ctrl-c.
+    #[arg(long, default_value_t = 0)]
+    demo_seconds: u64,
+
+    /// Override the theme JSON file.
     #[arg(long, env = "SENPI_NEO_THEME")]
-    theme: Option<String>,
-
-    /// Disable all animations (skip spinners, scanners, pulses).
-    #[arg(long, env = "SENPI_NEO_NO_ANIM", default_value_t = false)]
-    no_animations: bool,
-
-    /// Use inline viewport instead of alternate screen.
-    #[arg(long, default_value_t = false)]
-    inline: bool,
+    theme: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
-    if let Err(err) = run() {
-        eprintln!("senpi-neo-tui: {err:#}");
-        return ExitCode::from(1);
+    color_eyre::install().ok();
+    if let Err(err) = real_main() {
+        eprintln!("senpi-neo-tui: {err:?}");
+        return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
 }
 
-fn run() -> color_eyre::Result<()> {
-    color_eyre::install()?;
+fn real_main() -> Result<()> {
     let cli = Cli::parse();
-    eprintln!(
-        "senpi-neo-tui v{} scaffolded (backend_bin={:?}, no_anim={}, inline={})",
-        senpi_neo_tui::VERSION,
-        cli.backend_bin,
-        cli.no_animations,
-        cli.inline
-    );
+    let theme_json = match cli.theme.as_deref() {
+        Some(path) => std::fs::read_to_string(path)
+            .with_context(|| format!("reading theme json {}", path.display()))?,
+        None => DEFAULT_DARK_THEME_JSON.to_string(),
+    };
+    let theme = theme::resolve(&theme::parse(&theme_json)?)?;
+
+    let config = AppConfig {
+        theme,
+        initial_chat: chat::sample(),
+        header: HeaderState {
+            cwd: std::env::current_dir().map_or_else(
+                |_| "?".into(),
+                |p| {
+                    p.file_name()
+                        .map_or_else(|| "/".into(), |s| s.to_string_lossy().into_owned())
+                },
+            ),
+            session: "session: feat/neo-tui".into(),
+            branch: Some("feat/neo-tui".into()),
+        },
+        footer: FooterState {
+            status: Status::Streaming,
+            status_label: "streaming response".into(),
+            model: "claude-opus-4-7".into(),
+            thinking: Some("max".into()),
+            tps: Some(84),
+            ctx_used_pct: 42,
+            tokens_in: 12_400,
+            tokens_out: 3_120,
+            elapsed_secs: 0,
+            spinner_glyph: '⠂',
+        },
+        input_placeholder: "type your prompt here ".into(),
+        demo_mode: cli.demo,
+        demo_seconds: (cli.demo_seconds > 0).then_some(cli.demo_seconds),
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(app::run(config))?;
+    let _ = cli.backend_bin;
+    let _ = cli.backend_args;
     Ok(())
 }

@@ -175,6 +175,11 @@ pub fn parse(input: &str) -> Result<ThemeSpec, ThemeError> {
     Ok(spec)
 }
 
+/// Parse + resolve a JSON theme blob in a single shot.
+pub fn load(input: &str) -> Result<ResolvedTheme, ThemeError> {
+    resolve(&parse(input)?)
+}
+
 /// Resolve a [`ThemeSpec`] into a [`ResolvedTheme`].
 pub fn resolve(spec: &ThemeSpec) -> Result<ResolvedTheme, ThemeError> {
     if spec.tokens.is_empty() {
