@@ -51,11 +51,20 @@ pub async fn run(config: AppConfig) -> Result<()> {
 
 fn init_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     enable_raw_mode()?;
-    // From this point on every fallible call must roll back raw mode on
-    // failure, otherwise a botched init leaves the shell unusable after
-    // we return the error up to main.
+    // From this point on every fallible call must roll back EVERY piece
+    // of terminal state we've already enabled, otherwise a botched init
+    // leaves the user's shell in some half-on combination of raw mode,
+    // alt screen, or mouse capture.
     let mut stdout = std::io::stdout();
-    if let Err(err) = execute!(stdout, EnterAlternateScreen, EnableMouseCapture) {
+    // Sequence the alt-screen and mouse capture separately so we know
+    // exactly which step failed and can roll back only the parts we did
+    // turn on.
+    if let Err(err) = execute!(stdout, EnterAlternateScreen) {
+        let _ = disable_raw_mode();
+        return Err(err.into());
+    }
+    if let Err(err) = execute!(stdout, EnableMouseCapture) {
+        let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
         let _ = disable_raw_mode();
         return Err(err.into());
     }
@@ -63,8 +72,7 @@ fn init_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     match Terminal::new(backend) {
         Ok(term) => Ok(term),
         Err(err) => {
-            // Best-effort rollback. Errors here can't be reported any better
-            // than the caller-facing init failure we're about to return.
+            // Best-effort rollback for all three states we just enabled.
             let _ = execute!(
                 std::io::stdout(),
                 LeaveAlternateScreen,

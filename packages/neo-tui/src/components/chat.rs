@@ -78,18 +78,19 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, theme: &ResolvedTheme, state: &
         lines.push(empty_state_line(theme));
     }
 
-    // Long chats need to scroll: pin to the bottom by default so the
-    // newest line is always visible, and honour an explicit offset
-    // (clamped to the bottom anchor) when the user has scrolled up.
-    let line_total = u16::try_from(lines.len()).unwrap_or(u16::MAX);
-    let bottom_anchor = line_total.saturating_sub(inner.height);
+    // Long chats need to scroll. Because we use `Wrap { trim: false }`
+    // the rendered row count is `Paragraph::line_count(width)`, NOT
+    // `lines.len()`: long lines wrap across multiple rows and a naive
+    // `lines.len()` underestimates the rendered height. ratatui's
+    // `line_count` does the same wrap pass as the renderer.
+    let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let rendered_rows = u16::try_from(para.line_count(inner.width)).unwrap_or(u16::MAX);
+    let bottom_anchor = rendered_rows.saturating_sub(inner.height);
     let scroll = state
         .scroll_offset
         .map_or(bottom_anchor, |raw| raw.min(bottom_anchor));
 
-    let para = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0));
+    let para = para.scroll((scroll, 0));
     frame.render_widget(para, inner);
 }
 

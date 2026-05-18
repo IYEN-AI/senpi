@@ -16,12 +16,17 @@ A TUI needs exclusive ownership of the terminal: raw mode, alternate screen, Kit
 
 ## Run
 
-```bash
-# Dev: render the bundled demo scene at the current terminal size.
-cargo run --package senpi-neo-tui -- --demo --demo-seconds 5
+The crate ships two bins (`senpi-neo-tui`, the TUI itself; `senpi-neo-faux`,
+the offline RPC backend used by the QA harness), so `cargo run` needs `--bin`
+to disambiguate.
 
-# Via the senpi CLI (Node TS dispatch -> Rust binary):
-SENPI_NEO_TUI_DEV=1 node packages/coding-agent/dist/cli.js --neo --demo --demo-seconds 5
+```bash
+# Dev: render the bundled demo scene
+cargo run --release --package senpi-neo-tui --bin senpi-neo-tui -- \
+    --demo --demo-seconds 5
+
+# Or through the Node CLI (resolves the binary out of target/release):
+SENPI_NEO_TUI_DEV=1 node packages/coding-agent/dist/cli.js --neo
 ```
 
 The full faux RPC backend (`bin/senpi-neo-faux`) is planned for T6; the offline
