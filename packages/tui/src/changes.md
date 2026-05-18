@@ -1,5 +1,21 @@
 # TUI delta rendering fork changes
 
+## 2026-05-18: upstream-style scrollback replay for offscreen expansion
+
+### What changed
+
+- In `packages/tui/src/tui.ts` `TUI.doRender()`, structural changes that begin above the previous viewport now fall back to the upstream `fullRender(true)` replay path when the visible viewport would otherwise be unchanged.
+- In `packages/tui/test/tui-render.test.ts`, the Ctrl+O regression now checks xterm scrollback for multiple offscreen expanded blocks, not only the visible tail viewport.
+
+### Why
+
+- Terminal scrollback rows above the visible viewport cannot be rewritten in place. The earlier fork-only differential remap updated `previousLines` without rewriting hidden scrollback, so older collapsed tool/read blocks stayed visually collapsed while the bottom block appeared updated. Same-length hidden streaming churn and visible-row changes still use the differential path.
+
+### Expected merge conflict zones
+
+- HIGH: `TUI.doRender()` around the `firstChanged < prevViewportTop` branch, because this intentionally restores upstream behavior after the fork's no-clear remap path.
+- LOW: `packages/tui/test/tui-render.test.ts` under `TUI viewport remap for above-viewport growth`.
+
 ## 2026-05-15: in-place repaint for above-viewport collapse
 
 ### What changed

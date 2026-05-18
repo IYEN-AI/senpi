@@ -1234,23 +1234,45 @@ export class TUI extends Container {
 		}
 
 		// Differential rendering can only touch what was actually visible.
-		// If changed lines start above the previous viewport, keep the differential path
-		// when the visible viewport can still be compared row-for-row. Streaming updates
-		// often mutate transcript content above the viewport without changing visible rows.
 		if (firstChanged < prevViewportTop) {
 			if (newLines.length < this.previousLines.length) {
 				viewportTop = Math.max(0, newLines.length - height);
 			}
 
 			if (newLines.length > this.previousLines.length) {
-				const lineCountDelta = newLines.length - this.previousLines.length;
 				const maxViewportTop = Math.max(0, newLines.length - height);
 				viewportTop = Math.min(maxViewportTop, prevViewportTop + lineCountDelta);
 			}
 
-			// Transcript growth/shrink above the viewport can remap logical rows while keeping the
-			// same physical viewport. Avoid fullRender(true) replay by repainting only the
-			// current visible viewport rows in place.
+			let firstVisibleChanged = -1;
+			let lastVisibleChanged = -1;
+			for (let row = 0; row < height; row++) {
+				const previousLine = this.previousLines[prevViewportTop + row] ?? "";
+				const nextLine = newLines[viewportTop + row] ?? "";
+				if (previousLine !== nextLine) {
+					if (firstVisibleChanged === -1) {
+						firstVisibleChanged = row;
+					}
+					lastVisibleChanged = row;
+				}
+			}
+
+			if (firstVisibleChanged === -1) {
+				if (lineCountDelta !== 0) {
+					logRedraw(`firstChanged < viewportTop (${firstChanged} < ${prevViewportTop})`);
+					fullRender(true);
+					return;
+				}
+
+				this.cursorRow = Math.max(0, newLines.length - 1);
+				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+				this.previousLines = newLines;
+				this.previousWidth = width;
+				this.previousHeight = height;
+				this.previousViewportTop = viewportTop;
+				return;
+			}
+
 			if (viewportTop !== prevViewportTop) {
 				const previousViewportBottom = Math.min(this.previousLines.length - 1, prevViewportTop + height - 1);
 				let buffer = "\x1b[?2026h";
@@ -1279,29 +1301,6 @@ export class TUI extends Container {
 				this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 				this.previousWidth = width;
 				this.previousHeight = height;
-				return;
-			}
-
-			let firstVisibleChanged = -1;
-			let lastVisibleChanged = -1;
-			for (let row = 0; row < height; row++) {
-				const previousLine = this.previousLines[prevViewportTop + row] ?? "";
-				const nextLine = newLines[viewportTop + row] ?? "";
-				if (previousLine !== nextLine) {
-					if (firstVisibleChanged === -1) {
-						firstVisibleChanged = row;
-					}
-					lastVisibleChanged = row;
-				}
-			}
-
-			if (firstVisibleChanged === -1) {
-				this.cursorRow = Math.max(0, newLines.length - 1);
-				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
-				this.previousLines = newLines;
-				this.previousWidth = width;
-				this.previousHeight = height;
-				this.previousViewportTop = viewportTop;
 				return;
 			}
 
