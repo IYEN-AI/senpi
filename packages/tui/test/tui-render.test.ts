@@ -496,7 +496,7 @@ describe("TUI viewport remap for above-viewport growth", () => {
 		const writes = terminal.getWrites();
 		assert.strictEqual(tui.fullRedraws, initialFullRedraws, "Collapse should not full-redraw the viewport");
 		assert.ok(!writes.includes("\x1b[2J"), "Collapse should not clear the viewport");
-		assert.ok(!writes.includes("\x1b[3J"), "Collapse should not clear scrollback");
+		assert.ok(writes.includes("\x1b[3J"), "Collapse should reset stale scrollback");
 		assert.strictEqual(
 			countOccurrences(writes, "\x1b[?2026h"),
 			countOccurrences(writes, "\x1b[?2026l"),
@@ -546,11 +546,47 @@ describe("TUI viewport remap for above-viewport growth", () => {
 		const writes = terminal.getWrites();
 		assert.strictEqual(tui.fullRedraws, initialFullRedraws, "Ctrl+O toggles should not full-redraw the viewport");
 		assert.ok(!writes.includes("\x1b[2J"), "Ctrl+O toggles should not clear the viewport");
-		assert.ok(!writes.includes("\x1b[3J"), "Ctrl+O toggles should not clear scrollback");
+		assert.ok(writes.includes("\x1b[3J"), "Ctrl+O toggles should reset stale scrollback");
 		assert.strictEqual(
 			countOccurrences(writes, "\x1b[?2026h"),
 			countOccurrences(writes, "\x1b[?2026l"),
 			"Ctrl+O toggles should keep DECSET 2026 begin/end balanced",
+		);
+
+		tui.stop();
+	});
+
+	it("does not append duplicate transcript copies during hidden Ctrl+O replay", async () => {
+		const terminal = new LoggingVirtualTerminal(72, 6);
+		const tui = new TUI(terminal);
+		const component = new ExpandableTranscriptComponent();
+		tui.addChild(component);
+		const expectedViewport = ["tail row 0", "tail row 1", "tail row 2", "tail row 3", "tail row 4", "tail row 5"];
+
+		component.setExpanded(false);
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		for (const expanded of [true, false, true, false, true, false]) {
+			component.setExpanded(expanded);
+			tui.requestRender();
+			await terminal.waitForRender();
+			assert.deepStrictEqual(terminal.getViewport(), expectedViewport);
+		}
+
+		const writes = terminal.getWrites();
+		const scrollback = terminal.getScrollBuffer();
+		assert.ok(!writes.includes("\x1b[2J"), "Hidden replay should not clear the visible viewport");
+		assert.ok(writes.includes("\x1b[3J"), "Hidden replay should reset stale scrollback before replaying");
+		assert.ok(
+			scrollback.length <= 24,
+			`Hidden replay should keep scrollback bounded to one transcript copy, got ${scrollback.length} rows`,
+		);
+		assert.deepStrictEqual(
+			getScrollbackSuffix(scrollback, 8),
+			["session title", "tools", "tail row 0", "tail row 1", "tail row 2", "tail row 3", "tail row 4", "tail row 5"],
+			"Latest canonical scrollback segment should match the collapsed transcript",
 		);
 
 		tui.stop();
@@ -589,7 +625,7 @@ describe("TUI viewport remap for above-viewport growth", () => {
 			"Offscreen expansion should not full-redraw the viewport",
 		);
 		assert.ok(!terminal.getWrites().includes("\x1b[2J"), "Offscreen expansion should not clear the viewport");
-		assert.ok(!terminal.getWrites().includes("\x1b[3J"), "Offscreen expansion should not clear scrollback");
+		assert.ok(terminal.getWrites().includes("\x1b[3J"), "Offscreen expansion should reset stale scrollback");
 		assert.deepStrictEqual(
 			getScrollbackSuffix(scrollback, 20),
 			[

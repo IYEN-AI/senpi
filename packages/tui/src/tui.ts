@@ -975,6 +975,7 @@ export class TUI extends Container {
 	): void {
 		let buffer = "\x1b[?2026h";
 		buffer += this.deleteKittyImages(this.previousKittyImageIds);
+		buffer += "\x1b[3J";
 
 		const currentScreenRow = Math.max(0, Math.min(height - 1, hardwareCursorRow - prevViewportTop));
 		if (currentScreenRow > 0) {
