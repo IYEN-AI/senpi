@@ -1,0 +1,36 @@
+//! `senpi-neo-tui` - native Rust + ratatui TUI for senpi.
+//!
+//! See [`README`](https://github.com/code-yeongyu/senpi/blob/main/packages/neo-tui/README.md)
+//! and `plans/neo-tui.md` for the architecture and module layout.
+//!
+//! The crate exposes a thin library surface so integration tests and the
+//! offline faux backend can drive individual subsystems without
+//! constructing the full app.
+
+#![doc(html_root_url = "https://docs.rs/senpi-neo-tui")]
+
+pub mod anim;
+pub mod app;
+pub mod components;
+pub mod compositor;
+pub mod keymap;
+pub mod layout;
+pub mod rpc;
+pub mod term;
+pub mod theme;
+
+/// Crate version, mirrored from `Cargo.toml`.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Bundled default keymap JSON source (compile-time included).
+pub const DEFAULT_KEYMAP_JSON: &str = include_str!("../assets/keymaps/default.json");
+
+/// Bundled default dark theme JSON source (compile-time included).
+pub const DEFAULT_DARK_THEME_JSON: &str = include_str!("../assets/themes/senpi-neo-dark.json");
+
+/// Parse + resolve the bundled dark theme JSON into a [`theme::ResolvedTheme`].
+///
+/// Convenience for binaries and integration tests.
+pub fn load_bundled_dark_theme() -> Result<theme::ResolvedTheme, theme::ThemeError> {
+    theme::load(DEFAULT_DARK_THEME_JSON)
+}

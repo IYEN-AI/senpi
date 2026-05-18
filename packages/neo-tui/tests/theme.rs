@@ -1,0 +1,94 @@
+//! Contract tests for the theme system.
+//!
+//! T2 locks the parse-time and resolve-error shape. T7 ships the full
+//! resolver; this file gains additional happy-path assertions as the
+//! resolver covers more tokens.
+
+use ratatui::style::Color;
+use senpi_neo_tui::theme::{self, Token};
+
+const DARK_JSON: &str = senpi_neo_tui::DEFAULT_DARK_THEME_JSON;
+
+#[test]
+fn parses_bundled_dark_theme() {
+    let spec = theme::parse(DARK_JSON).expect("dark theme must parse");
+    let resolved = theme::resolve(&spec).expect("dark theme must resolve");
+
+    for token in [
+        Token::Primary,
+        Token::Secondary,
+        Token::Error,
+        Token::Warning,
+        Token::Success,
+        Token::Info,
+        Token::Text,
+        Token::TextMuted,
+        Token::Background,
+        Token::BackgroundPanel,
+        Token::Border,
+        Token::BorderActive,
+        Token::BorderSubtle,
+        Token::MarkdownHeading,
+        Token::SyntaxKeyword,
+    ] {
+        let color = resolved.token(token);
+        assert_ne!(
+            color,
+            ratatui::style::Color::Reset,
+            "token {token:?} must resolve to a concrete color"
+        );
+    }
+}
+
+#[test]
+fn resolves_core_tokens_in_dark_theme() {
+    let spec = theme::parse(DARK_JSON).expect("parse");
+    let resolved = theme::resolve(&spec).expect("resolve");
+
+    // Primary is the Tactile Monolith amber LED, defined via amberLed def.
+    assert_eq!(resolved.token(Token::Primary), Color::Rgb(0xFF, 0x9E, 0x64));
+    // Background is the deep espresso base.
+    assert_eq!(resolved.token(Token::Background), Color::Rgb(0x1A, 0x1B, 0x26));
+    // Secondary is the cyan LED.
+    assert_eq!(resolved.token(Token::Secondary), Color::Rgb(0x7D, 0xCF, 0xFF));
+}
+
+#[test]
+fn defaults_thinking_opacity() {
+    let spec = theme::parse(DARK_JSON).expect("parse");
+    let resolved = theme::resolve(&spec).expect("resolve");
+    // bundled dark theme sets thinkingOpacityPercent: 60
+    assert!((resolved.thinking_opacity - 0.6).abs() < 1e-4);
+}
+
+#[test]
+fn rejects_invalid_hex_in_resolve() {
+    let bad = r#"{
+        "name": "broken",
+        "type": "dark",
+        "tokens": { "primary": "not-a-hex" }
+    }"#;
+    let spec = theme::parse(bad).expect("parses raw json");
+    let err = theme::resolve(&spec).expect_err("must reject invalid hex");
+    let msg = err.to_string().to_lowercase();
+    assert!(
+        msg.contains("not-a-hex") || msg.contains("invalid hex") || msg.contains("invalid"),
+        "expected invalid-hex error, got: {msg}"
+    );
+}
+
+#[test]
+fn rejects_empty_tokens_at_resolve() {
+    let bad = r#"{
+        "name": "empty",
+        "type": "dark",
+        "tokens": {}
+    }"#;
+    let spec = theme::parse(bad).expect("parses raw json");
+    let err = theme::resolve(&spec).expect_err("must reject missing tokens");
+    let msg = err.to_string().to_lowercase();
+    assert!(
+        msg.contains("missing") || msg.contains("required"),
+        "expected missing-token error, got: {msg}"
+    );
+}
