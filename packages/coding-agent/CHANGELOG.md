@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
 ## [2026.5.19] - 2026-05-19
 
 ### Fixed
