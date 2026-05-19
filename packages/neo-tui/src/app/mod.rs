@@ -44,10 +44,14 @@ use crate::{
     },
     keymap::{self, FocusMode, ResolvedKeymap},
     layout::{self, LayoutState},
-    overlay::{HelpOverlay, Overlay, OverlayResult, PaletteOverlay, SlashOverlay},
+    overlay::{
+        HelpOverlay, ModelPickerOverlay, Overlay, OverlayResult, PaletteOverlay, SlashOverlay,
+        ThemePickerOverlay,
+    },
     rpc::{
         client::{Inbound, RpcClient},
         command::Command,
+        envelope::Response,
         event::Event as RpcEvent,
     },
     term::TerminalCaps,
@@ -80,12 +84,17 @@ pub enum AppAction {
     FollowUp(String),
     /// Open the model picker overlay (Ctrl+L).
     OpenModelPicker,
+    /// Open the theme picker overlay (Alt+T).
+    OpenThemePicker,
     /// Open the help overlay (?).
     OpenHelp,
     /// Open the command palette (Alt+P).
     OpenPalette,
-    /// Cycle the active model forward (true) or backward (false).
-    CycleModel { forward: bool },
+    /// Cycle the active model. The wire protocol's `cycle_model` is
+    /// next-only today, so this variant carries no direction. Backward
+    /// cycling lands at [`App::note_unimplemented_action`] in
+    /// [`App::execute_action`] until the backend grows a reverse RPC.
+    CycleModel,
     /// Cycle the thinking level (Shift+Tab).
     CycleThinkingLevel,
     /// Abort the in-flight generation (Escape during stream).
@@ -454,6 +463,185 @@ impl App {
         }
     }
 
+    /// Test-only entry point that drives [`Self::execute_action`] directly.
+    /// Useful for asserting overlay-selected actions (`neo.theme.set:<id>`,
+    /// `neo.model.set:<id>`) that can only flow into the dispatcher via
+    /// an overlay `OverlayResult::Selected` and have no keyboard chord.
+    /// `#[doc(hidden)]` keeps it out of the rendered public docs while
+    /// still letting integration tests under `tests/` see it.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn execute_action_for_tests(&mut self, id: &str) -> AppAction {
+        self.execute_action(id)
+    }
+
+    /// Apply a `neo.theme.set:<id>` selection emitted by the theme
+    /// picker overlay. Loads the registry entry, flips `self.theme` on
+    /// success, or pushes a chat error + footer error state on failure.
+    /// Bug 3 contract: never let a failed theme load fall through to
+    /// the catch-all silent consumer.
+    fn apply_theme_selection(&mut self, action_id: &str) -> AppAction {
+        let new_id = action_id.strip_prefix("neo.theme.set:").unwrap_or_default();
+        match theme::load_by_id(new_id, theme::ThemeMode::Dark) {
+            Ok(resolved) => {
+                self.theme = resolved;
+            }
+            Err(err) => {
+                self.chat
+                    .push_error(format!("Could not load theme `{new_id}`: {err}"));
+                self.footer.status = Status::Error;
+                self.footer.status_label = "theme load failed".into();
+            }
+        }
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Apply a `neo.model.set:<id>` selection emitted by the model
+    /// picker overlay. Push a chat-system note so the user sees that
+    /// the selection landed even though the backend `SetModel` wiring
+    /// (provider lookup) is not yet plumbed in `senpi --neo`. The
+    /// alternative (silent consume) was a Bug 3 violation flagged by
+    /// Oracle round 5.
+    fn apply_model_selection(&mut self, action_id: &str) -> AppAction {
+        let new_id = action_id.strip_prefix("neo.model.set:").unwrap_or_default();
+        self.chat.push_system(format!(
+            "Model selection (`{new_id}`) is not yet wired to the backend in `senpi --neo`. Use legacy `senpi` for runtime model switching.",
+        ));
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Surface an advertised-but-unimplemented action to chat so the
+    /// user sees that the chord landed. Bug 3 contract: silent no-ops
+    /// on slash-menu / palette / hotkey-advertised actions violate the
+    /// "if there is an error, say so" promise. Until the neo TUI grows
+    /// real implementations for the session / tree / models actions,
+    /// the explicit "not yet wired" note tells the user where to fall
+    /// back.
+    fn note_unimplemented_action(&mut self, action_id: &str) -> AppAction {
+        self.chat.push_system(format!(
+            "`{action_id}` is not yet wired in `senpi --neo`. Run `senpi` (without `--neo`) for this command.",
+        ));
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Bug 3 (Oracle round 7): the `tui.select.*` family is bound in
+    /// the bundled keymap and exposed by the command palette, but it
+    /// only does useful work while an overlay is open - the
+    /// compositor's `synthesise_select_event` routes those ids to the
+    /// active overlay's raw handler. Selecting one from the palette
+    /// when no overlay is open used to fall into the catch-all silent
+    /// consume. Push a chat-system note that names the action and
+    /// explains the overlay scoping so the chord is visibly accounted
+    /// for. This is distinct from `note_unimplemented_action` because
+    /// these actions ARE wired - just only inside an overlay.
+    fn note_overlay_only_action(&mut self, action_id: &str) -> AppAction {
+        self.chat.push_system(format!(
+            "`{action_id}` only takes effect while an overlay (slash menu, command palette, model / theme picker, help) is open. Open an overlay first, then trigger this action.",
+        ));
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Bug 3 (Oracle round 8): the raw key path at `handle_key` only
+    /// opens the slash overlay when the user types `/` with an empty
+    /// Input-focus buffer (so mid-prompt `/` inserts literally). When
+    /// the action is dispatched THROUGH `execute_action` (the
+    /// command palette path) the user explicitly chose it - the
+    /// buffer-empty precondition is moot. Open the overlay
+    /// unconditionally. Extracted into a helper so the dispatcher
+    /// stays under clippy's per-fn line ceiling.
+    fn open_slash_overlay(&mut self, action_id: &str) -> AppAction {
+        self.overlay = Some(Overlay::Slash(SlashOverlay::new()));
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Drain the input buffer into an `AppAction::FollowUp` for the
+    /// run loop to queue against the agent. Extracted from
+    /// `execute_action` to keep that function under clippy's per-fn
+    /// line ceiling.
+    fn apply_follow_up_action(&mut self) -> AppAction {
+        let text = self.input.take_buffer();
+        if !text.is_empty() {
+            self.input.push_history(&text);
+        }
+        self.clear_autocomplete();
+        AppAction::FollowUp(text)
+    }
+
+    /// Drain the input buffer into an `AppAction::SubmitPrompt` and
+    /// push a `Role::User` chat bubble immediately so the UI does not
+    /// sit at `idle` during the LLM round-trip window. Extracted from
+    /// `execute_action` to keep that function under clippy's per-fn
+    /// line ceiling.
+    fn apply_submit_action(&mut self) -> AppAction {
+        let text = self.input.take_buffer();
+        if !text.is_empty() {
+            self.input.push_history(&text);
+            self.chat.messages.push(Message {
+                role: Role::User,
+                body: text.clone(),
+                tool: None,
+            });
+            self.footer.status = Status::Busy;
+            self.footer.status_label = "waiting".into();
+        }
+        self.clear_autocomplete();
+        AppAction::SubmitPrompt(text)
+    }
+
+    /// Bug 3 (Oracle round 8): `tui.input.tab` is bound to `tab` in
+    /// the bundled keymap and exposed by the command palette. The
+    /// chord IS wired - `try_autocomplete_action` handles it when an
+    /// autocomplete popup is visible. But with no popup it used to
+    /// fall into the catch-all silent consume. Mirror the
+    /// `note_overlay_only_action` shape: push a chat-system note
+    /// that names the action and explains the autocomplete-scoping
+    /// so the user knows why their tab keystroke produced nothing.
+    fn note_autocomplete_only_action(&mut self, action_id: &str) -> AppAction {
+        self.chat.push_system(format!(
+            "`{action_id}` only takes effect while an autocomplete popup is showing. Type `@` for path completion or `/` for slash commands first.",
+        ));
+        AppAction::Consumed(action_id.to_owned())
+    }
+
+    /// Bug 3 (Oracle round 6): `app.editor.external` returns
+    /// `AppAction::ExternalEditor`, but `action_to_command` maps that
+    /// variant to `None` - so Ctrl+G previously produced zero visible
+    /// effect. Push a chat-system note explaining the in-buffer
+    /// external editor launch is not yet wired and still return the
+    /// typed variant so the existing parity test (and any future
+    /// in-process editor wiring) keeps working.
+    fn apply_external_editor_action(&mut self, action_id: &str) -> AppAction {
+        self.chat.push_system(format!(
+            "`{action_id}` (external editor launch) is not yet wired in `senpi --neo`. Run `senpi` (without `--neo`) for this command.",
+        ));
+        AppAction::ExternalEditor
+    }
+
+    /// Bug 3 (Oracle round 10): `app.thinking.toggle` (Ctrl+T) flipped
+    /// `self.thinking_visible`, but no render path consumed that
+    /// field, so the user-facing effect was zero. Keep the field
+    /// mutation (so wiring the renderer later is a one-line change)
+    /// and push a chat-system note so the chord visibly lands now.
+    fn apply_thinking_visibility_toggle(&mut self, action_id: &str) -> AppAction {
+        self.thinking_visible = !self.thinking_visible;
+        self.chat.push_system(format!(
+            "`{action_id}` (toggle thinking-block visibility) is not yet wired to chat rendering in `senpi --neo`. Run `senpi` (without `--neo`) for this command.",
+        ));
+        AppAction::ToggleThinkingVisibility
+    }
+
+    /// Bug 3 (Oracle round 10): mirror of
+    /// [`Self::apply_thinking_visibility_toggle`] for `app.tools.expand`
+    /// (Ctrl+O). The arm toggled `self.tools_expanded`, but no
+    /// rendering path read it, so the chord was a silent no-op.
+    fn apply_tools_expanded_toggle(&mut self, action_id: &str) -> AppAction {
+        self.tools_expanded = !self.tools_expanded;
+        self.chat.push_system(format!(
+            "`{action_id}` (toggle tool-output expansion) is not yet wired to chat rendering in `senpi --neo`. Run `senpi` (without `--neo`) for this command.",
+        ));
+        AppAction::ToggleToolsExpanded
+    }
+
     fn execute_action(&mut self, id: &str) -> AppAction {
         if let Some(action) = self.try_autocomplete_action(id) {
             return action;
@@ -463,14 +651,21 @@ impl App {
         }
         match id {
             "app.exit" => {
-                if self.input.buffer.is_empty() {
-                    AppAction::Quit
-                } else {
-                    // Legacy senpi: Ctrl+D on a non-empty buffer falls
-                    // through to delete-char-forward, which is a no-op
-                    // at end-of-line.
-                    AppAction::Consumed("tui.editor.deleteCharForward".into())
-                }
+                // Bug 3 (Oracle round 9): the user explicitly invoked
+                // exit, either by hitting Ctrl+D or by selecting
+                // /quit from the slash menu / command palette. The
+                // old branch tried to mimic legacy senpi's
+                // Ctrl+D-with-non-empty-buffer behavior by returning
+                // `Consumed("tui.editor.deleteCharForward")`, but
+                // that string was just a label - the buffer was
+                // never actually edited, and `/quit` from the
+                // palette silently closed without quitting. Treat
+                // `app.exit` as an unambiguous exit request now;
+                // if a user wants the Ctrl+D-delete-char-forward
+                // behavior, they can rebind Ctrl+D to
+                // `tui.editor.deleteCharForward` directly (which
+                // already has its own explicit arm below).
+                AppAction::Quit
             }
             "app.clear" => {
                 self.input.clear();
@@ -492,46 +687,35 @@ impl App {
                 }
             }
             "app.interrupt" => AppAction::Interrupt,
-            "app.model.cycleForward" => AppAction::CycleModel { forward: true },
-            "app.model.cycleBackward" => AppAction::CycleModel { forward: false },
-            "app.model.select" => AppAction::OpenModelPicker,
+            "app.model.cycleForward" => AppAction::CycleModel,
+            // Bug 3 (Oracle round 10): `cycle_model` on the wire is
+            // next-only. The old arm also produced `CycleModel` and
+            // `action_to_command` discarded the direction, so the
+            // backend cycled FORWARD when the user pressed
+            // `shift+ctrl+p` expecting BACKWARD. Surface a "not yet
+            // wired" chat note instead of silently doing the wrong
+            // thing. When the wire protocol grows a `cycle_model_back`
+            // (or similar), wire it up here.
+            "app.model.cycleBackward" => self.note_unimplemented_action(id),
+            "app.model.select" => {
+                // Ctrl+L: open the model picker overlay AND fire the
+                // backend `GetAvailableModels` command (mapped from
+                // OpenModelPicker in `action_to_command`). Pre-filling
+                // with the bundled MODELS list means the user sees a
+                // usable picker immediately; if the backend later sends
+                // a more accurate model list, the overlay can be
+                // refreshed in place. Without the overlay open, Ctrl+L
+                // was a silent no-op against the README's promise that
+                // it opens a model selector.
+                self.overlay = Some(Overlay::ModelPicker(ModelPickerOverlay::new()));
+                AppAction::OpenModelPicker
+            }
             "app.thinking.cycle" => AppAction::CycleThinkingLevel,
-            "app.thinking.toggle" => {
-                self.thinking_visible = !self.thinking_visible;
-                AppAction::ToggleThinkingVisibility
-            }
-            "app.tools.expand" => {
-                self.tools_expanded = !self.tools_expanded;
-                AppAction::ToggleToolsExpanded
-            }
-            "app.editor.external" => AppAction::ExternalEditor,
-            "app.message.followUp" => {
-                let text = self.input.take_buffer();
-                if !text.is_empty() {
-                    self.input.push_history(&text);
-                }
-                self.clear_autocomplete();
-                AppAction::FollowUp(text)
-            }
-            "tui.input.submit" => {
-                let text = self.input.take_buffer();
-                if !text.is_empty() {
-                    self.input.push_history(&text);
-                    self.chat.messages.push(Message {
-                        role: Role::User,
-                        body: text.clone(),
-                        tool: None,
-                    });
-                    // Reflect the submit immediately so the UI doesn't
-                    // sit at `idle` for the round-trip window before the
-                    // first AgentStart event arrives. apply_event will
-                    // overwrite the label as soon as real events flow.
-                    self.footer.status = Status::Busy;
-                    self.footer.status_label = "waiting".into();
-                }
-                self.clear_autocomplete();
-                AppAction::SubmitPrompt(text)
-            }
+            "app.thinking.toggle" => self.apply_thinking_visibility_toggle(id),
+            "app.tools.expand" => self.apply_tools_expanded_toggle(id),
+            "app.editor.external" => self.apply_external_editor_action(id),
+            "app.message.followUp" => self.apply_follow_up_action(),
+            "tui.input.submit" => self.apply_submit_action(),
             "tui.input.newLine" => {
                 self.input.insert_newline();
                 self.refresh_autocomplete();
@@ -554,6 +738,16 @@ impl App {
                 self.overlay = Some(Overlay::Palette(PaletteOverlay::from_keymap(&self.keymap)));
                 AppAction::OpenPalette
             }
+            "neo.theme.picker" => {
+                self.overlay = Some(Overlay::ThemePicker(ThemePickerOverlay::new(&self.theme.name)));
+                AppAction::OpenThemePicker
+            }
+            "neo.slash.open" => self.open_slash_overlay(id),
+            "tui.input.tab" => self.note_autocomplete_only_action(id),
+            other if other.starts_with("neo.theme.set:") => self.apply_theme_selection(other),
+            other if other.starts_with("neo.model.set:") => self.apply_model_selection(other),
+            other if is_overlay_scoped_select_action(other) => self.note_overlay_only_action(other),
+            other if is_advertised_unimplemented_action(other) => self.note_unimplemented_action(other),
             _ => AppAction::Consumed(id.to_owned()),
         }
     }
@@ -563,10 +757,11 @@ impl App {
     /// that stay purely TUI-local (overlay open/close, focus toggles,
     /// quit, literal-char insertion, ...).
     ///
-    /// `CycleModel { forward }` maps to `Command::CycleModel`
-    /// unconditionally because the wire protocol only supports forward
-    /// cycling today; the `forward` discriminator survives on
-    /// [`AppAction`] for future UI use.
+    /// `CycleModel` maps to `Command::CycleModel`. The wire protocol
+    /// only supports forward cycling today; the backward chord
+    /// (`shift+ctrl+p`) is intercepted earlier in
+    /// [`Self::execute_action`] and surfaced as a "not yet wired" chat
+    /// note (Bug 3, Oracle round 10).
     #[must_use]
     pub fn action_to_command(action: &AppAction) -> Option<Command> {
         match action {
@@ -580,7 +775,7 @@ impl App {
                 message: text.clone(),
             }),
             AppAction::Interrupt => Some(Command::Abort { id: None }),
-            AppAction::CycleModel { .. } => Some(Command::CycleModel { id: None }),
+            AppAction::CycleModel => Some(Command::CycleModel { id: None }),
             AppAction::CycleThinkingLevel => Some(Command::CycleThinkingLevel { id: None }),
             AppAction::OpenModelPicker => Some(Command::GetAvailableModels { id: None }),
             _ => None,
@@ -591,13 +786,20 @@ impl App {
     /// Streaming text accumulates in the last assistant message, tool
     /// cards land as their own messages, and footer status tracks the
     /// agent/turn lifecycle.
+    ///
+    /// Bug 3 contract ("if there's an error, say so"): every failure
+    /// path - subprocess exit, EOF, JSON decode error, AND
+    /// `Response { success: false }` - MUST surface to the chat and
+    /// footer. Silent error swallowing is the original user complaint
+    /// and the loudest regression vector here, so each arm below
+    /// renders something.
     pub fn apply_inbound(&mut self, msg: Inbound) {
         match msg {
             Inbound::Event(event) => {
                 self.footer.connected = true;
                 self.apply_event(event);
             }
-            Inbound::Response(_) => {}
+            Inbound::Response(response) => self.apply_response(&response),
             Inbound::Error {
                 exit_code,
                 stderr_tail,
@@ -624,7 +826,20 @@ impl App {
                 self.footer.connected = false;
             }
             Inbound::ParseError { line, source } => {
+                // Protocol corruption is invisible to the user if we
+                // only log to tracing - they see a stuck spinner and
+                // no clue why. Push a chat error so it shows up in the
+                // running terminal, and flip the footer so the status
+                // glyph reflects the broken state. Also keep the
+                // tracing line for stderr / log aggregation.
                 tracing::warn!(line = %line, source = %source, "rpc parse error");
+                let preview = line.chars().take(80).collect::<String>();
+                let suffix = if line.chars().count() > 80 { "..." } else { "" };
+                self.chat.push_error(format!(
+                    "Backend sent unparseable JSON: {source}\n\n{preview}{suffix}"
+                ));
+                self.footer.status = Status::Error;
+                self.footer.status_label = "protocol error".into();
             }
         }
     }
@@ -639,20 +854,8 @@ impl App {
                 self.footer.status = Status::Idle;
                 self.footer.status_label = "idle".into();
             }
-            RpcEvent::MessageEnd { .. } => {
-                // Drop the assistant bubble entirely when the backend
-                // produced only thinking deltas (or nothing) for this
-                // message - otherwise an empty `senpi` block sits in
-                // the chat in front of the real response.
-                if let Some(last) = self.chat.messages.last()
-                    && matches!(last.role, Role::Assistant)
-                    && last.body.is_empty()
-                    && last.tool.is_none()
-                {
-                    self.chat.messages.pop();
-                }
-                self.footer.status = Status::Idle;
-                self.footer.status_label = "idle".into();
+            RpcEvent::MessageEnd { message } => {
+                self.apply_message_end(&message);
             }
             RpcEvent::MessageStart { .. } => {
                 // Do NOT push an empty assistant bubble here. The backend
@@ -669,31 +872,7 @@ impl App {
                 assistant_message_event,
                 ..
             } => {
-                let delta = assistant_message_event.as_ref().and_then(|v| {
-                    let kind = v.get("type").and_then(serde_json::Value::as_str)?;
-                    if kind == "text_delta" {
-                        v.get("delta").and_then(serde_json::Value::as_str)
-                    } else {
-                        None
-                    }
-                });
-                if let Some(text) = delta {
-                    let needs_new_bubble = self
-                        .chat
-                        .messages
-                        .last()
-                        .is_none_or(|m| !matches!(m.role, Role::Assistant) || m.tool.is_some());
-                    if needs_new_bubble {
-                        self.chat.messages.push(Message {
-                            role: Role::Assistant,
-                            body: String::new(),
-                            tool: None,
-                        });
-                    }
-                    if let Some(last) = self.chat.messages.last_mut() {
-                        last.body.push_str(text);
-                    }
-                }
+                self.apply_message_update_delta(assistant_message_event.as_ref());
             }
             RpcEvent::ToolExecutionStart { tool_name, args, .. } => {
                 self.chat.messages.push(Message {
@@ -736,8 +915,266 @@ impl App {
                 self.footer.status = Status::Error;
                 self.footer.status_label = "error".into();
             }
+            RpcEvent::CompactionEnd {
+                aborted,
+                error_message,
+                will_retry,
+                ..
+            } if aborted || error_message.is_some() => {
+                self.apply_compaction_failure(error_message.as_deref(), will_retry);
+            }
+            RpcEvent::AutoRetryEnd {
+                success: false,
+                attempt,
+                final_error,
+            } => {
+                self.apply_auto_retry_failure(attempt, final_error.as_deref());
+            }
+            RpcEvent::ExtensionUiRequest {
+                method,
+                message,
+                notify_type,
+                title,
+            } => {
+                self.apply_extension_ui_request(
+                    &method,
+                    message.as_deref(),
+                    notify_type.as_deref(),
+                    title.as_deref(),
+                );
+            }
             _ => {}
         }
+    }
+
+    /// Append a streaming `text_delta` to the current assistant bubble,
+    /// or push a fresh assistant bubble if the last message is not an
+    /// assistant text block. Lazy bubble creation avoids the phantom
+    /// empty `senpi` row before the real reply (see `MessageStart`).
+    fn apply_message_update_delta(&mut self, event_payload: Option<&serde_json::Value>) {
+        let delta = event_payload.and_then(|v| {
+            let kind = v.get("type").and_then(serde_json::Value::as_str)?;
+            if kind == "text_delta" {
+                v.get("delta").and_then(serde_json::Value::as_str)
+            } else {
+                None
+            }
+        });
+        let Some(text) = delta else {
+            return;
+        };
+        let needs_new_bubble = self
+            .chat
+            .messages
+            .last()
+            .is_none_or(|m| !matches!(m.role, Role::Assistant) || m.tool.is_some());
+        if needs_new_bubble {
+            self.chat.messages.push(Message {
+                role: Role::Assistant,
+                body: String::new(),
+                tool: None,
+            });
+        }
+        if let Some(last) = self.chat.messages.last_mut() {
+            last.body.push_str(text);
+        }
+    }
+
+    /// Bug 3 (Oracle round 6): `compaction_end` previously silenced
+    /// `aborted` / `error_message`. Push a chat error explaining what
+    /// failed and whether the backend will retry, so the user knows
+    /// whether they need to intervene.
+    fn apply_compaction_failure(&mut self, error_message: Option<&str>, will_retry: bool) {
+        let retry_hint = if will_retry { " (will retry)" } else { "" };
+        let body = error_message.map_or_else(
+            || format!("Compaction aborted{retry_hint}."),
+            |err| format!("Compaction failed{retry_hint}: {err}"),
+        );
+        self.chat.push_error(body);
+    }
+
+    /// Bug 3 (Oracle round 6): `auto_retry_end { success: false, .. }`
+    /// previously silenced the final retry failure. Push a chat error
+    /// and flip the footer so the user sees the agent gave up instead
+    /// of watching it quietly go idle.
+    fn apply_auto_retry_failure(&mut self, attempt: u32, final_error: Option<&str>) {
+        let body = final_error.map_or_else(
+            || format!("Auto-retry exhausted after {attempt} attempt(s)."),
+            |err| format!("Auto-retry exhausted after {attempt} attempt(s): {err}"),
+        );
+        self.chat.push_error(body);
+        self.footer.status = Status::Error;
+        self.footer.status_label = "retry exhausted".into();
+    }
+
+    /// Apply a `message_end` event. Pops the empty assistant
+    /// placeholder bubble if the backend only emitted thinking
+    /// deltas (no visible text or tool card) for this message - that
+    /// kept a phantom empty `senpi` row from sitting in front of the
+    /// real reply.
+    ///
+    /// Bug 3 (Oracle round 6): when the agent loop's
+    /// `buildErrorAssistantMessage` ships a failed turn through
+    /// `message_end`, the `message.errorMessage` field carries the
+    /// provider error string. Push it as a chat error and flip the
+    /// footer instead of going straight to idle.
+    fn apply_message_end(&mut self, message: &serde_json::Value) {
+        if let Some(last) = self.chat.messages.last()
+            && matches!(last.role, Role::Assistant)
+            && last.body.is_empty()
+            && last.tool.is_none()
+        {
+            self.chat.messages.pop();
+        }
+        let err = message
+            .get("errorMessage")
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty());
+        if let Some(err) = err {
+            self.chat.push_error(err.to_owned());
+            self.footer.status = Status::Error;
+            self.footer.status_label = "assistant error".into();
+        } else {
+            self.footer.status = Status::Idle;
+            self.footer.status_label = "idle".into();
+        }
+    }
+
+    /// Route an inbound RPC `Response` envelope. Splits cleanly into a
+    /// failure path (already a Bug-3 surface as of Oracle round 2) and
+    /// a success path. The success path used to silently drop the
+    /// `data` payload, so `cycle_model` / `cycle_thinking_level`
+    /// commands fired but the user saw no model or thinking change
+    /// (Bug 3 leak flagged by Oracle round 10). Now successful
+    /// responses route through command-specific handlers that update
+    /// header + footer state AND push a chat note.
+    fn apply_response(&mut self, response: &Response) {
+        if !response.success {
+            let body = response.error.as_deref().map_or_else(
+                || format!("Backend reported `{}` failed.", response.command),
+                |err| format!("`{}` failed: {err}", response.command),
+            );
+            self.chat.push_error(body);
+            self.footer.status = Status::Error;
+            self.footer.status_label = "command failed".into();
+            return;
+        }
+        match response.command.as_str() {
+            "cycle_model" | "set_model" => self.apply_model_change_response(response),
+            "cycle_thinking_level" | "set_thinking_level" => {
+                self.apply_thinking_change_response(response);
+            }
+            // Other commands (`prompt`, `abort`, `new_session`,
+            // `get_state`, `get_available_models`, `get_session_stats`,
+            // ...) are acks without user-visible state changes the
+            // chat needs to broadcast. Keep them silent so the
+            // `app_inbound_successful_response_does_not_disturb_chat_or_footer`
+            // contract holds.
+            _ => {}
+        }
+    }
+
+    /// Surface a successful `cycle_model` / `set_model` response.
+    /// `cycle_model` data is `ModelCycleResult { model, thinkingLevel,
+    /// isScoped, ... }` (or `null` if no other model is available),
+    /// while `set_model` data is the picked Model directly. Try both
+    /// shapes so the same arm handles both commands.
+    fn apply_model_change_response(&mut self, response: &Response) {
+        let Some(data) = response.data.as_ref() else {
+            if response.command == "cycle_model" {
+                self.chat.push_system(
+                    "No other model is configured to cycle to. Open the model picker (`Ctrl+L`) or run `senpi` (without `--neo`) to add favorites.".into(),
+                );
+            }
+            return;
+        };
+        // cycle_model nests the Model under `model`; set_model returns
+        // the Model directly.
+        let model_obj = data.get("model").unwrap_or(data);
+        let name = model_obj
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| model_obj.get("id").and_then(serde_json::Value::as_str));
+        let Some(name) = name else {
+            return;
+        };
+        let provider = model_obj.get("provider").and_then(serde_json::Value::as_str);
+        let display = provider.map_or_else(|| name.to_owned(), |provider| format!("{provider}/{name}"));
+        self.header.model.clone_from(&display);
+        self.footer.model.clone_from(&display);
+        self.chat.push_system(format!("Model: {display}"));
+    }
+
+    /// Bug 3 (Oracle round 11): extensions emit
+    /// `extension_ui_request` frames for user-facing notifications
+    /// (`notify`) and modal dialogs (`select`, `confirm`, `input`,
+    /// `editor`). The old `apply_event` catch-all matched these as
+    /// [`RpcEvent::Other`] and silently discarded the message, so
+    /// extension warnings ("Command blocked", "Path denied", ...)
+    /// never reached chat. Surface each method:
+    /// - `notify` → push the message (`Role::Error` for
+    ///   `notifyType: "error"`, `Role::System` otherwise) and flip the
+    ///   footer status on error.
+    /// - Dialog methods → push a "not yet wired" chat note naming the
+    ///   method + title so the user sees the request landed. The
+    ///   backend's per-request timeout (or `ctx.hasUI` semantics)
+    ///   auto-resolves these; future dialog overlay work will replace
+    ///   the note with a real picker / prompt.
+    /// - Per-extension UI updates (`setStatus`, `setWidget`,
+    ///   `setTitle`, `set_editor_text`) stay silent because they are
+    ///   not user-facing errors and would otherwise flood chat.
+    fn apply_extension_ui_request(
+        &mut self,
+        method: &str,
+        message: Option<&str>,
+        notify_type: Option<&str>,
+        title: Option<&str>,
+    ) {
+        match method {
+            "notify" => {
+                let body = message.unwrap_or("(empty notification)");
+                if matches!(notify_type, Some("error")) {
+                    self.chat.push_error(format!("Extension: {body}"));
+                    self.footer.status = Status::Error;
+                    self.footer.status_label = "extension error".into();
+                } else {
+                    self.chat.push_system(format!("Extension: {body}"));
+                }
+            }
+            "select" | "confirm" | "input" | "editor" => {
+                let header = title.or(message).unwrap_or("(no title)");
+                self.chat.push_system(format!(
+                    "Extension dialog (`{method}`, title: \"{header}\") is not yet wired in `senpi --neo`. Run `senpi` (without `--neo`) for interactive extensions; the request will auto-resolve when the backend's timeout fires.",
+                ));
+            }
+            // setStatus / setWidget / setTitle / set_editor_text are
+            // per-extension UI updates, not user-facing errors. Keeping
+            // them silent matches the
+            // `app_inbound_successful_response_does_not_disturb_chat_or_footer`
+            // contract for protocol acks.
+            _ => {}
+        }
+    }
+
+    /// Surface a successful `cycle_thinking_level` / `set_thinking_level`
+    /// response. `cycle_thinking_level` data is `{ level }` (or
+    /// `null` if there is no other level), while `set_thinking_level`
+    /// emits no data (just the success ack), so a missing `level`
+    /// field is a noop for that command.
+    fn apply_thinking_change_response(&mut self, response: &Response) {
+        let Some(data) = response.data.as_ref() else {
+            if response.command == "cycle_thinking_level" {
+                self.chat
+                    .push_system("No other thinking level is configured to cycle to.".into());
+            }
+            return;
+        };
+        let Some(level) = data.get("level").and_then(serde_json::Value::as_str) else {
+            return;
+        };
+        self.header.thinking_level = Some(level.to_owned());
+        self.footer.thinking = Some(level.to_owned());
+        self.chat.push_system(format!("Thinking level: {level}"));
     }
 }
 
@@ -858,6 +1295,82 @@ fn init_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     }
 }
 
+/// Action ids that the bundled keymap + slash menu + command palette
+/// advertise but the neo TUI does not yet implement end-to-end. The
+/// legacy senpi TUI implements all of these; the rewrite has not
+/// caught up yet. Without an explicit list the catch-all in
+/// `execute_action` silently consumed them, which violates Bug 3.
+/// Listing them here lets the dispatcher show a one-line chat
+/// notification ("not yet wired") so the user sees that the chord
+/// landed and knows where to fall back.
+const ADVERTISED_BUT_UNIMPLEMENTED_ACTIONS: &[&str] = &[
+    "app.session.toggleNamedFilter",
+    "app.session.new",
+    "app.session.tree",
+    "app.session.fork",
+    "app.session.resume",
+    "app.session.rename",
+    "app.session.delete",
+    "app.session.deleteNoninvasive",
+    "app.session.togglePath",
+    "app.session.toggleSort",
+    "app.suspend",
+    "app.tree.foldOrUp",
+    "app.tree.unfoldOrDown",
+    "app.tree.editLabel",
+    "app.tree.toggleLabelTimestamp",
+    "app.tree.filter.default",
+    "app.tree.filter.noTools",
+    "app.tree.filter.userOnly",
+    "app.tree.filter.labeledOnly",
+    "app.tree.filter.all",
+    "app.tree.filter.cycleForward",
+    "app.tree.filter.cycleBackward",
+    "app.models.save",
+    "app.models.toggleFavorite",
+    "app.models.enableAll",
+    "app.models.clearAll",
+    "app.models.toggleProvider",
+    "app.models.reorderUp",
+    "app.models.reorderDown",
+    // NOTE: `app.message.followUp` is intentionally NOT here - it is
+    // a fully implemented explicit `execute_action` arm that drains
+    // the input buffer into an `AppAction::FollowUp`. Listing it
+    // here would route it through `note_unimplemented_action` and
+    // shadow the real behavior. Oracle round 8 audit confirmed the
+    // explicit arm wins, but the dead list entry was misleading.
+    "app.message.dequeue",
+    "app.clipboard.pasteImage",
+    "neo.sidebar.toggle",
+    "neo.compact",
+    "neo.toggle_animations",
+];
+
+fn is_advertised_unimplemented_action(id: &str) -> bool {
+    ADVERTISED_BUT_UNIMPLEMENTED_ACTIONS.contains(&id)
+}
+
+/// `tui.select.*` action ids that the bundled keymap + command
+/// palette advertise but that only take effect when an overlay's raw
+/// handler is consuming the synthetic key (see
+/// `synthesise_select_event`). Selecting one from the palette when no
+/// overlay is open used to be a silent no-op (Bug 3, Oracle round 7);
+/// listing them here lets the dispatcher push an explanatory chat
+/// note via [`App::note_overlay_only_action`] instead of dropping
+/// into the catch-all.
+const OVERLAY_SCOPED_SELECT_ACTIONS: &[&str] = &[
+    "tui.select.up",
+    "tui.select.down",
+    "tui.select.pageUp",
+    "tui.select.pageDown",
+    "tui.select.confirm",
+    "tui.select.cancel",
+];
+
+fn is_overlay_scoped_select_action(id: &str) -> bool {
+    OVERLAY_SCOPED_SELECT_ACTIONS.contains(&id)
+}
+
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
     let caps = TerminalCaps::detect();
     disable_raw_mode()?;
@@ -878,14 +1391,28 @@ fn write_terminal_bytes(bytes: &[u8]) -> std::io::Result<()> {
 /// Spawn the RPC backend if `SENPI_NEO_BACKEND_BIN` is set in the
 /// environment. `SENPI_NEO_BACKEND_ARGS` carries the extra args as a
 /// JSON-encoded string array so arguments with embedded whitespace
-/// (e.g. `--system-prompt "..."`) survive intact. Returns `None`
-/// when env is unset or the spawn fails; the TUI then falls back to
-/// render-only so demos, screenshots, and unit tests run with no
-/// backend present.
-fn maybe_spawn_backend() -> Option<RpcClient> {
-    let bin = std::env::var_os("SENPI_NEO_BACKEND_BIN")?;
+/// (e.g. `--system-prompt "..."`) survive intact.
+///
+/// Returns one of:
+/// - `Ok(None)`: env unset; the TUI runs in render-only mode (demos,
+///   screenshots, unit tests).
+/// - `Ok(Some(client))`: backend booted successfully.
+/// - `Err(message)`: env was set but the spawn failed. The caller MUST
+///   surface this to the user; previously the failure was silently
+///   collapsed to `None` and the user saw the same UI as a demo run
+///   (Bug 3 leak flagged by Oracle round 2 + 4).
+fn maybe_spawn_backend() -> Result<Option<RpcClient>, String> {
+    let Some(bin) = std::env::var_os("SENPI_NEO_BACKEND_BIN") else {
+        return Ok(None);
+    };
     let args = parse_backend_args(&std::env::var("SENPI_NEO_BACKEND_ARGS").unwrap_or_default());
-    RpcClient::spawn(&bin, &args).ok()
+    match RpcClient::spawn(&bin, &args) {
+        Ok(client) => Ok(Some(client)),
+        Err(err) => Err(format!(
+            "failed to launch senpi backend binary `{}`: {err}",
+            std::path::Path::new(&bin).display(),
+        )),
+    }
 }
 
 /// Decode the `SENPI_NEO_BACKEND_ARGS` env value into a runnable arg
@@ -903,6 +1430,85 @@ fn parse_backend_args(raw: &str) -> Vec<String> {
     trimmed.split_whitespace().map(str::to_owned).collect()
 }
 
+/// Outcome of one `EventStream::next()` poll, surfaced from
+/// [`handle_terminal_event`] so [`drive`] stays under clippy's
+/// per-fn line ceiling without losing readability.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalEventOutcome {
+    Continue,
+    Quit,
+    Disconnected,
+    BackendChannelClosed,
+}
+
+async fn handle_terminal_event(
+    app: &mut App,
+    cmd_tx: Option<&mpsc::Sender<Command>>,
+    demo_mode: bool,
+    ev: Option<Result<CrosstermEvent, std::io::Error>>,
+) -> TerminalEventOutcome {
+    match ev {
+        Some(Ok(CrosstermEvent::Key(key))) => {
+            let action = app.handle_key(key);
+            if matches!(action, AppAction::Quit) {
+                return TerminalEventOutcome::Quit;
+            }
+            // RPC commands only fire when a backend is attached. In
+            // demo mode `cmd_tx` is `None`, so AppActions that would
+            // have produced a Command silently degrade to local-only
+            // UI state changes (overlays, focus, etc.).
+            if let Some(cmd) = App::action_to_command(&action) {
+                if let Some(tx) = cmd_tx {
+                    if tx.send(cmd).await.is_err() {
+                        return TerminalEventOutcome::BackendChannelClosed;
+                    }
+                } else if !demo_mode {
+                    app.apply_inbound(Inbound::Error {
+                        exit_code: None,
+                        stderr_tail: "No backend process is connected.".into(),
+                    });
+                }
+            }
+            TerminalEventOutcome::Continue
+        }
+        Some(Ok(CrosstermEvent::Paste(text))) => {
+            // Bracketed paste: the terminal hands us the whole
+            // clipboard payload atomically. Splice it into the input
+            // buffer as one undo-able operation; IME pastes of
+            // multi-grapheme CJK strings stay intact.
+            if matches!(app.focus, FocusMode::Input) {
+                app.input.handle_paste(&text);
+                app.refresh_autocomplete();
+            }
+            TerminalEventOutcome::Continue
+        }
+        Some(Ok(CrosstermEvent::Mouse(mouse))) => {
+            app.handle_mouse(mouse);
+            TerminalEventOutcome::Continue
+        }
+        Some(Err(err)) => {
+            // Bug 3 (Oracle round 6): a `Some(Err(_))` from
+            // `EventStream` means the terminal-input pipe hit an I/O
+            // failure - keystrokes will not be landing any more.
+            // Surface it so the user knows why the TUI suddenly
+            // stopped reacting instead of getting a silent freeze.
+            app.apply_inbound(Inbound::Error {
+                exit_code: None,
+                stderr_tail: format!("terminal input stream error: {err}"),
+            });
+            TerminalEventOutcome::Continue
+        }
+        Some(Ok(_)) => TerminalEventOutcome::Continue,
+        None => {
+            // Stream exhausted - the TTY closed. Without an explicit
+            // break the loop would spin because `Poll::Ready(None)`
+            // is always immediate.
+            app.apply_inbound(Inbound::Disconnected);
+            TerminalEventOutcome::Disconnected
+        }
+    }
+}
+
 async fn drive(terminal: &mut Terminal<CrosstermBackend<Stdout>>, config: AppConfig) -> Result<()> {
     let demo_mode = config.demo_mode;
     let demo_seconds = config.demo_seconds;
@@ -912,7 +1518,22 @@ async fn drive(terminal: &mut Terminal<CrosstermBackend<Stdout>>, config: AppCon
     // do not require a backend on the host. Production paths set
     // SENPI_NEO_BACKEND_BIN to either senpi --mode rpc or the QA
     // harness's senpi-neo-faux binary.
-    let mut backend: Option<RpcClient> = if demo_mode { None } else { maybe_spawn_backend() };
+    let mut backend: Option<RpcClient> = None;
+    if !demo_mode {
+        match maybe_spawn_backend() {
+            Ok(client) => backend = client,
+            Err(message) => {
+                // Bug 3 contract: an env-configured-but-unspawnable
+                // backend used to boot identically to demo mode. Now
+                // the user sees the actual spawn failure as soon as the
+                // first frame renders.
+                app.apply_inbound(Inbound::Error {
+                    exit_code: None,
+                    stderr_tail: message,
+                });
+            }
+        }
+    }
     let mut inbound: Option<mpsc::Receiver<Inbound>> = backend.as_mut().and_then(RpcClient::take_inbound);
     let cmd_tx: Option<mpsc::Sender<Command>> = backend.as_ref().map(RpcClient::command_sender);
 
@@ -947,45 +1568,14 @@ async fn drive(terminal: &mut Terminal<CrosstermBackend<Stdout>>, config: AppCon
                 app.input.focus_pulse = app.input.focus_pulse.wrapping_add(8);
             }
             ev = events.next() => {
-                match ev {
-                    Some(Ok(CrosstermEvent::Key(key))) => {
-                        let action = app.handle_key(key);
-                        if matches!(action, AppAction::Quit) {
-                            break;
-                        }
-                        // RPC commands only fire when a backend is attached.
-                        // In demo mode `cmd_tx` is `None`, so AppActions that
-                        // would have produced a Command silently degrade to
-                        // local-only UI state changes (overlays, focus, etc.).
-                        if let Some(cmd) = App::action_to_command(&action) {
-                            if let Some(tx) = cmd_tx.as_ref() {
-                                if tx.send(cmd).await.is_err() {
-                                    app.apply_inbound(Inbound::Disconnected);
-                                    inbound = None;
-                                }
-                            } else if !demo_mode {
-                                app.apply_inbound(Inbound::Error {
-                                    exit_code: None,
-                                    stderr_tail: "No backend process is connected.".into(),
-                                });
-                            }
-                        }
+                let outcome = handle_terminal_event(&mut app, cmd_tx.as_ref(), demo_mode, ev).await;
+                match outcome {
+                    TerminalEventOutcome::Continue => {}
+                    TerminalEventOutcome::Quit | TerminalEventOutcome::Disconnected => break,
+                    TerminalEventOutcome::BackendChannelClosed => {
+                        app.apply_inbound(Inbound::Disconnected);
+                        inbound = None;
                     }
-                    Some(Ok(CrosstermEvent::Paste(text))) => {
-                        // Bracketed paste: the terminal hands us the
-                        // whole clipboard payload atomically. Splice
-                        // it into the input buffer at the cursor as
-                        // one undo-able operation; IME pastes of
-                        // multi-grapheme CJK strings stay intact.
-                        if matches!(app.focus, FocusMode::Input) {
-                            app.input.handle_paste(&text);
-                            app.refresh_autocomplete();
-                        }
-                    }
-                    Some(Ok(CrosstermEvent::Mouse(mouse))) => {
-                        app.handle_mouse(mouse);
-                    }
-                    _ => {}
                 }
             }
             // 4th arm: drain inbound RPC frames when a backend is up.

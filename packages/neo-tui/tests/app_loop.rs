@@ -124,20 +124,199 @@ fn ctrl_l_dispatches_app_model_select_action() {
 }
 
 #[test]
-fn ctrl_p_dispatches_cycle_model_forward() {
+fn ctrl_l_actually_opens_the_model_picker_overlay() {
+    // Oracle round 4: returning `AppAction::OpenModelPicker` is not
+    // enough - the legacy senpi behavior, the README, and the help
+    // overlay all promise that `Ctrl+L` brings up a visible model
+    // picker. Previously the dispatch only sent
+    // `Command::GetAvailableModels` to the backend and waited for a
+    // response that nothing was wired to consume. Lock the overlay
+    // open so a user actually sees something pop up.
     let mut app = fresh_app();
-    let action = app.handle_key(ev(KeyCode::Char('p'), KeyModifiers::CONTROL));
-    assert_eq!(action, AppAction::CycleModel { forward: true });
+    app.handle_key(ev(KeyCode::Char('l'), KeyModifiers::CONTROL));
+    assert!(
+        matches!(app.overlay, Some(Overlay::ModelPicker(_))),
+        "Ctrl+L must open the model picker overlay, got {:?}",
+        app.overlay,
+    );
 }
 
 #[test]
-fn shift_ctrl_p_dispatches_cycle_model_backward() {
+fn theme_picker_selection_applies_the_chosen_theme() {
+    // Oracle round 4: `ThemePickerOverlay` emits
+    // `OverlayResult::Selected("neo.theme.set:<id>")`, which the
+    // dispatcher hands to `execute_action`. Previously the catch-all
+    // arm just consumed the action with no effect - the overlay closed
+    // and the theme stayed the same. The user got no error, no theme
+    // change, no feedback at all (a textbook silent failure). Lock
+    // the contract so picking a theme actually replaces `app.theme`.
+    // The bundled opencode JSON uses display names like "Dracula"
+    // while registry ids are lowercased (`dracula`), so the post-load
+    // check is on the JSON `name` field as exposed by ResolvedTheme.
     let mut app = fresh_app();
+    let before_name = app.theme.name.clone();
+    assert_eq!(
+        before_name, "senpi-neo-dark",
+        "fresh app must boot on the bundled senpi-neo-dark theme",
+    );
+
+    let action = app.execute_action_for_tests("neo.theme.set:dracula");
+
+    assert!(
+        matches!(action, AppAction::Consumed(_)),
+        "theme set must consume the action, got {action:?}",
+    );
+    assert_ne!(
+        app.theme.name, before_name,
+        "theme must change away from the boot default after the set action",
+    );
+    assert_eq!(
+        app.theme.name, "Dracula",
+        "loading the `dracula` registry id must land on the Dracula display name",
+    );
+}
+
+#[test]
+fn theme_picker_selection_with_unknown_id_pushes_a_chat_error() {
+    // Oracle round 4 corollary: a malformed or unknown registry id
+    // (`neo.theme.set:does-not-exist`) is itself a Bug-3 silent-failure
+    // candidate. Surface the load error to chat + footer so the user
+    // sees what went wrong instead of the overlay closing with no
+    // visual change.
+    let mut app = fresh_app();
+    let before_name = app.theme.name.clone();
+    let messages_before = app.chat.messages.len();
+
+    let action = app.execute_action_for_tests("neo.theme.set:not-a-real-theme-id");
+
+    assert!(
+        matches!(action, AppAction::Consumed(_)),
+        "even on failure the dispatch must consume the action so the loop continues",
+    );
+    assert_eq!(
+        app.theme.name, before_name,
+        "failure must not partially mutate the theme",
+    );
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "an error chat message must be pushed for an unknown theme id",
+    );
+    let last = app.chat.messages.last().expect("error chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("not-a-real-theme-id"),
+        "error body must name the failing id, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn model_picker_selection_pushes_visible_feedback() {
+    // Oracle round 5: the model picker emits
+    // `OverlayResult::Selected("neo.model.set:<id>")`. Previously the
+    // dispatcher had no arm for that prefix and silently consumed it -
+    // the overlay closed, no model changed on the backend, and the
+    // user saw nothing happen. Until provider plumbing lands, surface
+    // a chat-system note so the chord is visibly accounted for.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("neo.model.set:claude-opus-4-7");
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "model selection must push a chat message",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("claude-opus-4-7"),
+        "chat body must name the picked model, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn unimplemented_slash_command_visibly_notifies_user() {
+    // Oracle round 5: the slash menu and command palette advertise
+    // `app.session.new`, `app.session.tree`, `app.tree.filter.*`,
+    // `app.models.save`, `neo.compact`, etc., but the neo TUI has
+    // no execute_action arm for them. Previously selecting one
+    // silently closed the overlay with no feedback (Bug 3 leak).
+    // Now the dispatcher detects the advertised-but-unimplemented
+    // ids and pushes a chat note so the user knows the chord was
+    // received AND that the feature is not yet wired in --neo.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("app.session.new");
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "unimplemented action must push a chat message",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.session.new") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and mark it as not yet wired, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn alt_t_dispatches_open_theme_picker_and_opens_overlay() {
+    // Bug-3 followup: the keymap defines `neo.theme.picker -> alt+t` and
+    // the docs (README + help overlay) advertise Alt+T as the theme
+    // picker shortcut, but the dispatcher previously fell into the
+    // catch-all `Consumed` arm and the overlay never opened. Lock the
+    // contract on the App side so it cannot silently regress to a no-op.
+    let mut app = fresh_app();
+    let action = app.handle_key(ev(KeyCode::Char('t'), KeyModifiers::ALT));
+    assert_eq!(action, AppAction::OpenThemePicker);
+    assert!(
+        matches!(app.overlay, Some(Overlay::ThemePicker(_))),
+        "expected the theme picker overlay to be open after Alt+T, got {:?}",
+        app.overlay,
+    );
+}
+
+#[test]
+fn ctrl_p_dispatches_cycle_model() {
+    let mut app = fresh_app();
+    let action = app.handle_key(ev(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    assert_eq!(action, AppAction::CycleModel);
+}
+
+#[test]
+fn shift_ctrl_p_app_model_cycle_backward_visibly_notifies_user() {
+    // Oracle round 10: the wire protocol's `cycle_model` is next-only.
+    // The old `app.model.cycleBackward` arm produced
+    // `AppAction::CycleModel { forward: false }` and
+    // `action_to_command` discarded the direction, so pressing
+    // `shift+ctrl+p` silently cycled FORWARD when the user expected
+    // backward. Surface a "not yet wired" chat note instead.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
     let action = app.handle_key(ev(
         KeyCode::Char('p'),
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
     ));
-    assert_eq!(action, AppAction::CycleModel { forward: false });
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        App::action_to_command(&action).is_none(),
+        "cycleBackward must NOT fire an RPC command",
+    );
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "cycleBackward chord must push a visible chat message",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.model.cycleBackward") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and flag it as not yet wired, got {:?}",
+        last.body,
+    );
 }
 
 #[test]
@@ -171,6 +350,165 @@ fn ctrl_g_dispatches_external_editor() {
     let mut app = fresh_app();
     let action = app.handle_key(ev(KeyCode::Char('g'), KeyModifiers::CONTROL));
     assert_eq!(action, AppAction::ExternalEditor);
+}
+
+#[test]
+fn ctrl_g_app_editor_external_pushes_visible_feedback_note() {
+    // Oracle round 6: `app.editor.external` (Ctrl+G) returns
+    // `AppAction::ExternalEditor`, but the run loop has no handler
+    // for that variant - the keystroke produced zero user-visible
+    // effect. Bug 3 contract: surface a chat-system note so the
+    // user sees that the chord landed AND that the external editor
+    // is not yet wired in `senpi --neo`.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("app.editor.external");
+    assert_eq!(
+        action,
+        AppAction::ExternalEditor,
+        "must keep returning the typed variant for future wiring",
+    );
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "external editor chord must push a visible chat message",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.editor.external") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and flag it as not yet wired, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn app_exit_dispatched_from_palette_quits_even_with_nonempty_buffer() {
+    // Oracle round 9 defect: selecting `/quit` from the palette
+    // routes through `execute_action("app.exit")`. The existing arm
+    // returned `AppAction::Quit` when the buffer was empty but
+    // otherwise returned `AppAction::Consumed("tui.editor.deleteCharForward")`
+    // - a silent no-op (the label string did NOT actually invoke
+    // delete-char-forward). When the user explicitly picks /quit,
+    // they want to quit regardless of buffer state. Lock the
+    // contract so the palette path always exits.
+    let mut app = fresh_app();
+    for ch in "draft prompt".chars() {
+        app.handle_key(ev(KeyCode::Char(ch), KeyModifiers::NONE));
+    }
+    assert!(!app.input_buffer().is_empty());
+    let action = app.execute_action_for_tests("app.exit");
+    assert_eq!(
+        action,
+        AppAction::Quit,
+        "app.exit dispatched explicitly (e.g. /quit from palette) must quit regardless of buffer state, got {action:?}",
+    );
+}
+
+#[test]
+fn neo_slash_open_dispatched_from_palette_opens_slash_overlay() {
+    // Oracle round 8 defect: `neo.slash.open` is bound to `/` in the
+    // bundled keymap and surfaced by the command palette via
+    // `PaletteOverlay::from_keymap`. The raw key path at
+    // `app/mod.rs:362` only opens the slash overlay when the user
+    // types `/` with an empty Input-focus buffer. When the action
+    // is dispatched THROUGH `execute_action` (the palette path) it
+    // had no arm and fell into the silent catch-all - selecting
+    // `neo.slash.open` from the palette closed the palette with no
+    // slash overlay and no feedback. Bug 3: surface an explicit
+    // overlay open when the action is dispatched directly, since
+    // the user explicitly picked it from a list.
+    let mut app = fresh_app();
+    let action = app.execute_action_for_tests("neo.slash.open");
+    assert!(
+        matches!(action, AppAction::Consumed(_)),
+        "neo.slash.open dispatched directly must produce a Consumed action, got {action:?}",
+    );
+    assert!(
+        matches!(app.overlay, Some(Overlay::Slash(_))),
+        "neo.slash.open dispatched from the palette must open the slash overlay, got {:?}",
+        app.overlay,
+    );
+}
+
+#[test]
+fn tui_input_tab_outside_autocomplete_visibly_notifies_user() {
+    // Oracle round 8 defect: `tui.input.tab` is bound to `tab` in
+    // the bundled keymap and surfaced by the command palette.
+    // `try_autocomplete_action` handles it ONLY when an autocomplete
+    // popup is present; with no popup the action fell into the
+    // catch-all silent consume. Bug 3: surface a chat-system note
+    // explaining the autocomplete scoping so the chord is visibly
+    // accounted for.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("tui.input.tab");
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "tui.input.tab outside an autocomplete popup must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("tui.input.tab")
+            && (last.body.to_lowercase().contains("autocomplete")
+                || last.body.to_lowercase().contains("popup")),
+        "chat body must name the action and explain the autocomplete scoping, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn tui_select_action_outside_overlay_visibly_notifies_user() {
+    // Oracle round 7 defect: `tui.select.{up,down,pageUp,pageDown,
+    // confirm,cancel}` are advertised in the bundled keymap +
+    // command palette but only do useful work while an overlay is
+    // open (the compositor's `synthesise_select_event` routes them
+    // to the active overlay's raw handler). Without an overlay the
+    // dispatcher previously dropped them into the catch-all silent
+    // consume - selecting `tui.select.up` from the palette produced
+    // zero visible effect. Surface a chat-system note explaining the
+    // overlay scoping so the chord is visibly accounted for.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("tui.select.up");
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "tui.select.* outside an overlay must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("tui.select.up") && last.body.to_lowercase().contains("overlay"),
+        "chat body must name the action and explain the overlay scoping, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn ctrl_z_app_suspend_visibly_notifies_user() {
+    // Oracle round 6: `app.suspend` (Ctrl+Z) is advertised in the
+    // bundled keymap and exposed via the command palette, but the
+    // dispatcher silently consumed it through the catch-all `_` arm.
+    // Bug 3 contract: every advertised chord that lands must produce
+    // visible feedback - either real behavior or an explicit "not
+    // yet wired" chat note.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.execute_action_for_tests("app.suspend");
+    assert!(matches!(action, AppAction::Consumed(_)));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "app.suspend chord must push a visible chat message",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.suspend") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and flag it as not yet wired, got {:?}",
+        last.body,
+    );
 }
 
 #[test]
@@ -289,11 +627,13 @@ fn shift_ctrl_p_does_not_open_palette_after_rebind() {
     let mut app = fresh_app();
     // After the chord rebind, shift+ctrl+p hits the legacy
     // app.model.cycleBackward binding and must NOT open the palette.
+    // As of Oracle round 10, that chord surfaces a "not yet wired"
+    // chat note instead of producing CycleModel { forward: false }.
     let action = app.handle_key(ev(
         KeyCode::Char('p'),
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
     ));
-    assert_eq!(action, AppAction::CycleModel { forward: false });
+    assert!(matches!(action, AppAction::Consumed(_)));
     assert!(app.overlay.is_none());
 }
 
@@ -363,7 +703,10 @@ fn ctrl_shift_p_no_longer_opens_palette_after_rebind() {
         KeyCode::Char('p'),
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
     ));
-    assert_eq!(action, AppAction::CycleModel { forward: false });
+    // Oracle round 10: cycleBackward surfaces "not yet wired"; the
+    // important contract for this test is the negative (palette must
+    // stay closed) regardless of the dispatched AppAction shape.
+    assert!(matches!(action, AppAction::Consumed(_)));
     assert!(
         app.overlay.is_none(),
         "ctrl+shift+p must NOT open the palette after the rebind to alt+p",
@@ -413,15 +756,14 @@ fn action_to_command_maps_interrupt_to_abort() {
 }
 
 #[test]
-fn action_to_command_maps_cycle_model_regardless_of_direction() {
-    let forward = App::action_to_command(&AppAction::CycleModel { forward: true }).expect("forward must map");
-    let backward =
-        App::action_to_command(&AppAction::CycleModel { forward: false }).expect("backward must map");
-    // The wire protocol only carries forward cycling today; both
-    // directions reduce to the same Command. The forward flag is
-    // preserved on AppAction for future UI use.
-    assert!(matches!(forward, Command::CycleModel { .. }));
-    assert!(matches!(backward, Command::CycleModel { .. }));
+fn action_to_command_maps_cycle_model_to_cycle_model_command() {
+    // The wire protocol's `cycle_model` is next-only today, so
+    // `AppAction::CycleModel` carries no direction (Oracle round 10).
+    // The backward chord `shift+ctrl+p` lands at
+    // `note_unimplemented_action` in `execute_action` and never
+    // produces this variant.
+    let cmd = App::action_to_command(&AppAction::CycleModel).expect("cycle must map");
+    assert!(matches!(cmd, Command::CycleModel { .. }));
 }
 
 #[test]
@@ -578,6 +920,142 @@ fn apply_inbound_tool_execution_end_error_marks_tool_failed() {
 }
 
 #[test]
+fn apply_inbound_message_end_with_error_message_surfaces_to_chat_and_footer() {
+    // Oracle round 6: the agent loop ships assistant/provider
+    // failures via `message_end` with `message.errorMessage` set
+    // (see packages/agent/src/agent-loop.ts buildErrorAssistantMessage).
+    // The neo TUI's `MessageEnd` arm previously only dropped empty
+    // assistant bubbles and flipped the footer to idle - the error
+    // string was silently discarded. Bug 3: surface it as a chat
+    // error so the user sees WHY the turn ended.
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Event(RpcEvent::MessageEnd {
+        message: serde_json::json!({
+            "role": "assistant",
+            "stopReason": "error",
+            "errorMessage": "rate limit exceeded; retry after 60s",
+        }),
+    }));
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("message_end with errorMessage must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("rate limit exceeded"),
+        "chat body must include the assistant error message, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn apply_inbound_compaction_end_aborted_surfaces_to_chat() {
+    // Oracle round 6: `CompactionEnd { aborted: true }` was silently
+    // dropped by the `_ => {}` catch-all in `apply_event`. The user
+    // had no idea the compaction attempt failed.
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Event(RpcEvent::CompactionEnd {
+        reason: Some("auto-threshold".into()),
+        result: serde_json::json!({}),
+        aborted: true,
+        will_retry: false,
+        error_message: None,
+    }));
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("aborted compaction must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.to_lowercase().contains("compaction"),
+        "chat body must mention compaction, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_compaction_end_with_error_message_surfaces_to_chat() {
+    // Oracle round 6: same defect, error-message variant.
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Event(RpcEvent::CompactionEnd {
+        reason: None,
+        result: serde_json::json!({}),
+        aborted: false,
+        will_retry: false,
+        error_message: Some("context too large to summarize".into()),
+    }));
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("compaction error must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("context too large to summarize"),
+        "chat body must surface the compaction error, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_compaction_end_success_does_not_disturb_chat() {
+    // Successful compaction is silent by design; only failure
+    // paths must surface. Locks the contract so the round-6 fix
+    // does not over-fire on clean compactions.
+    let mut app = fresh_app();
+    let before = app.chat.messages.len();
+    app.apply_inbound(Inbound::Event(RpcEvent::CompactionEnd {
+        reason: Some("auto-threshold".into()),
+        result: serde_json::json!({}),
+        aborted: false,
+        will_retry: false,
+        error_message: None,
+    }));
+    assert_eq!(app.chat.messages.len(), before);
+}
+
+#[test]
+fn apply_inbound_auto_retry_end_failure_surfaces_to_chat() {
+    // Oracle round 6: `AutoRetryEnd { success: false, final_error }`
+    // was dropped by the catch-all `_ => {}`. When retries are
+    // exhausted the user must see the final error.
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Event(RpcEvent::AutoRetryEnd {
+        success: false,
+        attempt: 3,
+        final_error: Some("upstream 5xx after 3 attempts".into()),
+    }));
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("failed auto-retry must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("upstream 5xx after 3 attempts"),
+        "chat body must surface the final retry error, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn apply_inbound_auto_retry_end_success_does_not_disturb_chat() {
+    // Successful retry recovery is silent; only failure surfaces.
+    let mut app = fresh_app();
+    let before = app.chat.messages.len();
+    app.apply_inbound(Inbound::Event(RpcEvent::AutoRetryEnd {
+        success: true,
+        attempt: 2,
+        final_error: None,
+    }));
+    assert_eq!(app.chat.messages.len(), before);
+}
+
+#[test]
 fn apply_inbound_extension_error_pushes_error_message() {
     let mut app = fresh_app();
     app.apply_inbound(Inbound::Event(RpcEvent::ExtensionError {
@@ -629,22 +1107,122 @@ fn app_inbound_disconnected_pushes_system_message() {
 }
 
 #[test]
-fn app_inbound_parse_error_does_not_disrupt_ui() {
+fn app_inbound_parse_error_surfaces_to_chat_and_footer() {
+    // Bug 3 regression: protocol-level failures must NEVER be silent.
+    // The user's exact complaint was "에러가났으면 났다 안났으면 안났다 전혀안되노"
+    // ("if there's an error, say so; if there isn't, say so - it doesn't
+    // work at all"). A `ParseError` means the backend sent something the
+    // TUI cannot decode; that is an error condition and must show up in
+    // chat + footer just like an `Inbound::Error`. The previous version
+    // logged this to `tracing::warn!` only, which is invisible to a
+    // user running `senpi --neo` in a terminal.
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::ParseError {
+        line: "garbage{".into(),
+        source: "expected `,` or `}` at line 1 column 8".into(),
+    });
+
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("parse error must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("expected `,` or `}`"),
+        "chat error body must surface the decoder error, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+    assert!(
+        app.footer.status_label.contains("protocol") || app.footer.status_label.contains("parse"),
+        "footer must label this as a protocol/parse error, got {:?}",
+        app.footer.status_label,
+    );
+}
+
+#[test]
+fn app_inbound_failed_response_surfaces_to_chat_and_footer() {
+    // Bug 3 regression: a `Response { success: false, error: Some(_) }`
+    // is the backend explicitly telling the TUI "your command failed".
+    // Previously `apply_inbound` matched `Inbound::Response(_)` to `{}`
+    // and silently dropped it - so the user got no signal that, e.g.,
+    // `Submit` or `GetAvailableModels` failed on the agent side.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-7".into()),
+        command: "submit".into(),
+        success: false,
+        data: None,
+        error: Some("model unavailable".into()),
+    }));
+
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("failed response must push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("model unavailable"),
+        "chat error body must include the backend error string, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn app_inbound_failed_response_without_error_message_still_surfaces() {
+    // Same as above but the backend omitted the human-readable error
+    // string. The TUI must STILL surface this as a failure - silently
+    // dropping a `success: false` frame is the original Bug 3.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    app.apply_inbound(Inbound::Response(Response {
+        id: None,
+        command: "cycle_model".into(),
+        success: false,
+        data: None,
+        error: None,
+    }));
+
+    let last = app
+        .chat
+        .messages
+        .last()
+        .expect("failed response with no error message must still push a chat message");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("cycle_model") || last.body.to_lowercase().contains("failed"),
+        "chat error must mention the failing command or that it failed, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn app_inbound_successful_response_does_not_disturb_chat_or_footer() {
+    // Successful responses are protocol acks (e.g. ID echo, no data).
+    // They must NOT push noise into chat or flip the footer status.
+    use senpi_neo_tui::rpc::envelope::Response;
+
     let mut app = fresh_app();
     let messages_before = app.chat.messages.len();
     let status_before = app.footer.status;
-    let status_label_before = app.footer.status_label.clone();
-    let connected_before = app.footer.connected;
 
-    app.apply_inbound(Inbound::ParseError {
-        line: "garbage".into(),
-        source: "expected `:`".into(),
-    });
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-1".into()),
+        command: "abort".into(),
+        success: true,
+        data: None,
+        error: None,
+    }));
 
     assert_eq!(app.chat.messages.len(), messages_before);
     assert_eq!(app.footer.status, status_before);
-    assert_eq!(app.footer.status_label, status_label_before);
-    assert_eq!(app.footer.connected, connected_before);
 }
 
 #[test]
@@ -917,4 +1495,359 @@ fn app_mouse_wheel_at_bottom_does_nothing() {
     });
 
     assert_eq!(app.chat.scroll_offset, 0);
+}
+
+#[test]
+fn ctrl_t_app_thinking_toggle_visibly_notifies_user() {
+    // Oracle round 10: `app.thinking.toggle` (Ctrl+T) flipped
+    // `self.thinking_visible`, but no render path consumed that
+    // field, so the user-facing effect was zero - the chord was a
+    // silent no-op against the README/`/hotkeys` advertisement that
+    // Ctrl+T toggles thinking-block visibility. Bug 3 contract:
+    // surface a "not yet wired to rendering" chat note so the user
+    // sees that the chord landed even though nothing renders yet.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.handle_key(ev(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    assert_eq!(action, AppAction::ToggleThinkingVisibility);
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "ctrl+t must push a visible chat message until rendering is wired",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.thinking.toggle") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and flag it as not yet wired, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn ctrl_o_app_tools_expand_visibly_notifies_user() {
+    // Oracle round 10 (mirror of ctrl_t): `app.tools.expand` (Ctrl+O)
+    // toggled `self.tools_expanded`, but no render path consumed the
+    // field, so the user saw nothing change. Push a chat-system note
+    // so the chord visibly lands.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let action = app.handle_key(ev(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert_eq!(action, AppAction::ToggleToolsExpanded);
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "ctrl+o must push a visible chat message until rendering is wired",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("app.tools.expand") && last.body.to_lowercase().contains("not yet"),
+        "chat body must name the action and flag it as not yet wired, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_cycle_model_success_response_updates_displays() {
+    // Oracle round 10: pressing Ctrl+P fires `Command::CycleModel`,
+    // the backend cycles to the next model and returns
+    // `Response { success: true, command: "cycle_model", data:
+    // { model: { id, name, provider, ... }, thinkingLevel,
+    // isScoped } }`. The old `apply_inbound` arm matched
+    // `Inbound::Response` only for the `success: false` case and
+    // silently dropped the success payload, so the user saw no
+    // model change in header or footer - a Bug 3 silent failure for
+    // a working backend feature.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    let header_before = app.header.model.clone();
+    let footer_before = app.footer.model.clone();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-cycle-1".into()),
+        command: "cycle_model".into(),
+        success: true,
+        data: Some(serde_json::json!({
+            "model": {
+                "id": "claude-opus-4-7",
+                "name": "Claude Opus 4.7",
+                "provider": "anthropic"
+            },
+            "thinkingLevel": "high",
+            "isScoped": true,
+        })),
+        error: None,
+    }));
+
+    assert_ne!(app.header.model, header_before);
+    assert_ne!(app.footer.model, footer_before);
+    assert!(app.header.model.contains("Claude Opus 4.7"));
+    assert!(app.footer.model.contains("Claude Opus 4.7"));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "successful cycle_model must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("Claude Opus 4.7"),
+        "chat body must name the new model, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_cycle_model_success_response_with_null_data_pushes_note() {
+    // When `session.cycleModel()` returns `null` (no other model
+    // configured), rpc-mode emits `Response { success: true,
+    // command: "cycle_model", data: null }`. The user pressed the
+    // chord and expects feedback; "absolutely nothing happens"
+    // violates Bug 3. Surface a one-line note explaining there is no
+    // other model to cycle to.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-cycle-2".into()),
+        command: "cycle_model".into(),
+        success: true,
+        data: None,
+        error: None,
+    }));
+
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "null-data cycle_model response must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.to_lowercase().contains("model"),
+        "chat body must mention model, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_set_model_success_response_updates_displays() {
+    // Oracle round 10: `set_model` success data is the Model
+    // directly (not wrapped in `model`). Same Bug-3 contract:
+    // header + footer + chat note must reflect the change.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-set-1".into()),
+        command: "set_model".into(),
+        success: true,
+        data: Some(serde_json::json!({
+            "id": "gpt-5",
+            "name": "GPT-5",
+            "provider": "openai"
+        })),
+        error: None,
+    }));
+
+    assert!(app.header.model.contains("GPT-5"));
+    assert!(app.footer.model.contains("GPT-5"));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "successful set_model must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("GPT-5"),
+        "chat body must name the new model, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_cycle_thinking_level_success_response_updates_displays() {
+    // Oracle round 10: Shift+Tab fires `CycleThinkingLevel`. The
+    // backend returns `Response { success: true, command:
+    // "cycle_thinking_level", data: { level: "..." } }`. Surface
+    // the new level to header + footer + chat.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-think-1".into()),
+        command: "cycle_thinking_level".into(),
+        success: true,
+        data: Some(serde_json::json!({ "level": "minimal" })),
+        error: None,
+    }));
+
+    assert_eq!(app.header.thinking_level.as_deref(), Some("minimal"));
+    assert_eq!(app.footer.thinking.as_deref(), Some("minimal"));
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "successful cycle_thinking_level must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.to_lowercase().contains("thinking"),
+        "chat body must mention thinking level, got {:?}",
+        last.body,
+    );
+    assert!(
+        last.body.contains("minimal"),
+        "chat body must name the new level, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_inbound_cycle_thinking_level_success_response_with_null_data_pushes_note() {
+    // Mirror of the cycle_model null-data case. When
+    // `session.cycleThinkingLevel()` returns null (only one level
+    // configured), Bug 3 contract still requires visible feedback.
+    use senpi_neo_tui::rpc::envelope::Response;
+
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Response(Response {
+        id: Some("cmd-think-2".into()),
+        command: "cycle_thinking_level".into(),
+        success: true,
+        data: None,
+        error: None,
+    }));
+
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "null-data cycle_thinking_level response must push a visible chat note",
+    );
+    let last = app.chat.messages.last().expect("message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.to_lowercase().contains("thinking"),
+        "chat body must mention thinking, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_event_extension_ui_request_notify_error_pushes_chat_error() {
+    // Oracle round 11: extensions emit
+    // `extension_ui_request` frames for user-facing notifications.
+    // `notify` with `notifyType: "error"` is the loudest Bug 3
+    // candidate - the legacy senpi TUI shows it as an error toast.
+    // The old neo-tui catch-all in `apply_event` matched these as
+    // `Event::Other` and silently dropped them, so an extension
+    // could emit "Command blocked by policy" and the user saw
+    // nothing.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Event(RpcEvent::ExtensionUiRequest {
+        method: "notify".into(),
+        message: Some("Command blocked by policy".into()),
+        notify_type: Some("error".into()),
+        title: None,
+    }));
+
+    assert!(
+        app.chat.messages.len() > messages_before,
+        "extension notify error must push a visible chat message",
+    );
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::Error);
+    assert!(
+        last.body.contains("Command blocked by policy"),
+        "chat body must include the extension notification body, got {:?}",
+        last.body,
+    );
+    assert_eq!(app.footer.status, Status::Error);
+}
+
+#[test]
+fn apply_event_extension_ui_request_notify_warning_pushes_chat_system() {
+    // `notifyType: "warning"` and the default `info` both surface as
+    // `Role::System` so the user sees the message without the chat
+    // turning red. Footer stays untouched (these are advisory).
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let status_before = app.footer.status;
+
+    app.apply_inbound(Inbound::Event(RpcEvent::ExtensionUiRequest {
+        method: "notify".into(),
+        message: Some("Heads up: low disk space".into()),
+        notify_type: Some("warning".into()),
+        title: None,
+    }));
+
+    assert!(app.chat.messages.len() > messages_before);
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(last.body.contains("Heads up: low disk space"));
+    assert_eq!(
+        app.footer.status, status_before,
+        "warning / info notify must NOT flip the footer to error",
+    );
+}
+
+#[test]
+fn apply_event_extension_ui_request_dialog_method_pushes_not_yet_wired_note() {
+    // `select`, `confirm`, `input`, `editor` are dialog methods that
+    // block the agent until the client sends an
+    // `extension_ui_response`. Until neo-tui grows dialog overlays
+    // (separate feature work), surface a "not yet wired" chat note
+    // so the user sees the request landed and knows to fall back to
+    // legacy senpi if they need to act on it.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+
+    app.apply_inbound(Inbound::Event(RpcEvent::ExtensionUiRequest {
+        method: "confirm".into(),
+        message: Some("All messages will be lost.".into()),
+        notify_type: None,
+        title: Some("Clear session?".into()),
+    }));
+
+    assert!(app.chat.messages.len() > messages_before);
+    let last = app.chat.messages.last().expect("chat message exists");
+    assert_eq!(last.role, Role::System);
+    assert!(
+        last.body.contains("confirm")
+            && last.body.contains("Clear session?")
+            && last.body.to_lowercase().contains("not yet wired"),
+        "chat body must name the dialog method + title + flag as not wired, got {:?}",
+        last.body,
+    );
+}
+
+#[test]
+fn apply_event_extension_ui_request_set_status_stays_silent() {
+    // Inverse contract: per-extension UI updates (`setStatus`,
+    // `setWidget`, `setTitle`, `set_editor_text`) are not user-facing
+    // errors. The old behavior was to drop them via `Event::Other`,
+    // and that part of the silent-drop is intentional - keep them
+    // silent so chat does not flood when extensions update their own
+    // status pills. This locks the silence so a future maintainer
+    // does not turn it into noise.
+    let mut app = fresh_app();
+    let messages_before = app.chat.messages.len();
+    let status_before = app.footer.status;
+
+    app.apply_inbound(Inbound::Event(RpcEvent::ExtensionUiRequest {
+        method: "setStatus".into(),
+        message: None,
+        notify_type: None,
+        title: None,
+    }));
+
+    assert_eq!(app.chat.messages.len(), messages_before);
+    assert_eq!(app.footer.status, status_before);
 }
