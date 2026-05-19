@@ -39,9 +39,7 @@ impl Status {
     const fn token(self) -> Token {
         match self {
             Self::Idle => Token::StatusIdle,
-            Self::Busy | Self::Streaming | Self::ToolRunning | Self::Compacting => {
-                Token::StatusBusy
-            }
+            Self::Busy | Self::Streaming | Self::ToolRunning | Self::Compacting => Token::StatusBusy,
             Self::Error => Token::StatusError,
         }
     }
@@ -58,63 +56,115 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, theme: &ResolvedTheme, state: &
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(20), Constraint::Length(right_width(area.width))])
+        .constraints([
+            Constraint::Min(20),
+            Constraint::Length(right_width(area.width, state.status)),
+        ])
         .split(area);
 
     let left = chunks[0];
     let right = chunks[1];
 
-    let left_line = Line::from(vec![
+    // Idle should not animate — render a static dot instead of the
+    // braille spinner that the run loop keeps advancing every 80ms.
+    let glyph_char = if state.status == Status::Idle {
+        '·'
+    } else {
+        state.spinner_glyph
+    };
+    // Only render `model:<name>` when an actual model name is known
+    // so an empty production startup does not show a dangling `model:`
+    // label with nothing after the colon.
+    let mut left_spans = vec![
         Span::styled(
-            format!(" {} ", state.spinner_glyph),
+            format!(" {glyph_char} "),
             Style::default().fg(status_color).add_modifier(Modifier::BOLD),
         ),
         Span::styled(state.status_label.clone(), Style::default().fg(status_color)),
-        Span::raw("  "),
-        Span::styled("model:", Style::default().fg(muted)),
-        Span::styled(state.model.clone(), Style::default().fg(text)),
-        thinking_span(state, text),
-    ]);
+    ];
+    if !state.model.is_empty() {
+        left_spans.push(Span::raw("  "));
+        left_spans.push(Span::styled("model:", Style::default().fg(muted)));
+        left_spans.push(Span::styled(state.model.clone(), Style::default().fg(text)));
+        left_spans.push(thinking_span(state, text));
+    }
+    let left_line = Line::from(left_spans);
     let left_p = Paragraph::new(left_line).style(Style::default().bg(bg));
     frame.render_widget(left_p, left);
 
-    let right_line = Line::from(vec![
-        Span::styled(format!("ctx {:>3}% ", state.ctx_used_pct), Style::default().fg(muted)),
-        Span::raw("│ "),
-        Span::styled(
-            format!("{}↓ {}↑ ", short_count(state.tokens_in), short_count(state.tokens_out)),
-            Style::default().fg(text),
-        ),
-        Span::raw("│ "),
-        Span::styled(
-            state.tps.map_or_else(|| "  --t/s ".to_string(), |t| format!("{t:>3}t/s ")),
-            Style::default().fg(theme.token(Token::Info)),
-        ),
-        Span::raw("│ "),
-        Span::styled(format_elapsed(state.elapsed_secs), Style::default().fg(muted)),
-        Span::raw(" "),
-    ]);
+    // The right cluster (ctx % / tokens / tps / elapsed) only makes
+    // sense while a turn is actively running. In Idle we leave it blank
+    // so a fresh `senpi --neo` does not look like a fake in-flight
+    // session.
+    let right_line = if state.status == Status::Idle {
+        Line::from(Span::raw(""))
+    } else {
+        let mut spans: Vec<Span<'_>> = Vec::new();
+        spans.push(Span::styled(
+            format!("ctx {:>3}% ", state.ctx_used_pct),
+            Style::default().fg(muted),
+        ));
+        if area.width >= 80 {
+            spans.push(Span::raw("│ "));
+            spans.push(Span::styled(
+                format!(
+                    "{}↓ {}↑ ",
+                    short_count(state.tokens_in),
+                    short_count(state.tokens_out)
+                ),
+                Style::default().fg(text),
+            ));
+        }
+        if area.width >= 110 {
+            spans.push(Span::raw("│ "));
+            spans.push(Span::styled(
+                state
+                    .tps
+                    .map_or_else(|| "  --t/s ".to_string(), |t| format!("{t:>3}t/s ")),
+                Style::default().fg(theme.token(Token::Info)),
+            ));
+        }
+        if area.width >= 130 {
+            spans.push(Span::raw("│ "));
+            spans.push(Span::styled(
+                format_elapsed(state.elapsed_secs),
+                Style::default().fg(muted),
+            ));
+            spans.push(Span::raw(" "));
+        }
+        Line::from(spans)
+    };
     let right_p = Paragraph::new(right_line)
         .alignment(Alignment::Right)
         .style(Style::default().bg(bg));
     frame.render_widget(right_p, right);
 }
 
-fn thinking_span(
-    state: &FooterState,
-    text: ratatui::style::Color,
-) -> Span<'_> {
+fn thinking_span(state: &FooterState, text: ratatui::style::Color) -> Span<'_> {
     state.thinking.as_ref().map_or_else(
         || Span::raw(""),
-        |level| Span::styled(
-            format!(":{level}"),
-            Style::default().fg(text).add_modifier(Modifier::DIM),
-        ),
+        |level| {
+            Span::styled(
+                format!(":{level}"),
+                Style::default().fg(text).add_modifier(Modifier::DIM),
+            )
+        },
     )
 }
 
-const fn right_width(area_width: u16) -> u16 {
-    if area_width >= 100 { 56 } else { area_width / 2 }
+const fn right_width(area_width: u16, status: Status) -> u16 {
+    if matches!(status, Status::Idle) {
+        return 0;
+    }
+    if area_width >= 130 {
+        56
+    } else if area_width >= 110 {
+        44
+    } else if area_width >= 80 {
+        28
+    } else {
+        12
+    }
 }
 
 fn short_count(value: u64) -> String {

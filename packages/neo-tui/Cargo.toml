@@ -37,6 +37,7 @@ tokio = { version = "1", features = [
     "time",
     "process",
     "io-util",
+    "io-std",
     "fs",
     "signal",
 ] }
@@ -59,6 +60,7 @@ pulldown-cmark = { version = "0.13", default-features = false }
 arc-swap = "1"
 parking_lot = "0.12"
 unicode-width = "0.2"
+unicode-segmentation = "1"
 dirs = "5"
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 

@@ -40,12 +40,11 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, theme: &ResolvedTheme, state: &
     let banner = Paragraph::new(vec![
         Line::from(""),
         Line::from(vec![
+            Span::styled("senpi", Style::default().fg(primary).add_modifier(Modifier::BOLD)),
             Span::styled(
-                "▓▓ senpi",
-                Style::default().fg(primary).add_modifier(Modifier::BOLD),
+                " neo",
+                Style::default().fg(secondary).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" neo ", Style::default().fg(secondary).add_modifier(Modifier::BOLD)),
-            Span::styled("// ratatui · crossterm · tokio", Style::default().fg(muted)),
         ]),
         Line::from(""),
     ]);

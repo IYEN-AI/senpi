@@ -1,19 +1,22 @@
 //! `senpi-neo-tui` binary entry.
 
-use std::{path::PathBuf, process::ExitCode};
+use std::{
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use clap::Parser;
 use color_eyre::eyre::{Context, Result};
 
 use senpi_neo_tui::{
-    DEFAULT_DARK_THEME_JSON,
     app::{self, AppConfig},
     components::{
         chat,
         footer::{FooterState, Status},
         header::HeaderState,
     },
-    theme,
+    theme::{self, DEFAULT_THEME_ID, ThemeMode},
 };
 
 #[derive(Debug, Parser)]
@@ -23,12 +26,14 @@ use senpi_neo_tui::{
     about = "Native Rust + ratatui TUI for senpi (launched via `senpi --neo`)."
 )]
 struct Cli {
-    /// Path to senpi backend binary for `--mode rpc`. Currently unused;
-    /// the demo render does not spawn a backend.
+    /// Path to senpi backend binary for `--mode rpc`. When set, the
+    /// TUI spawns the backend on startup; otherwise the run is offline
+    /// (demo mode or no agent activity).
     #[arg(long, env = "SENPI_NEO_BACKEND_BIN")]
     backend_bin: Option<PathBuf>,
 
-    /// JSON array of args to forward to the backend. Currently unused.
+    /// JSON array of args to forward to the backend, e.g.
+    /// `["--mode","rpc"]`. Ignored when `--backend-bin` is unset.
     #[arg(long, env = "SENPI_NEO_BACKEND_ARGS", default_value = "[]")]
     backend_args: String,
 
@@ -40,9 +45,13 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     demo_seconds: u64,
 
-    /// Override the theme JSON file.
+    /// Override the theme by bundled id or JSON file path.
     #[arg(long, env = "SENPI_NEO_THEME")]
-    theme: Option<PathBuf>,
+    theme: Option<String>,
+
+    /// Print bundled theme ids and exit.
+    #[arg(long)]
+    list_themes: bool,
 }
 
 fn main() -> ExitCode {
@@ -56,40 +65,91 @@ fn main() -> ExitCode {
 
 fn real_main() -> Result<()> {
     let cli = Cli::parse();
-    let theme_json = match cli.theme.as_deref() {
-        Some(path) => std::fs::read_to_string(path)
-            .with_context(|| format!("reading theme json {}", path.display()))?,
-        None => DEFAULT_DARK_THEME_JSON.to_string(),
+
+    if cli.list_themes {
+        let mut stdout = io::stdout().lock();
+        for id in theme::list_theme_ids() {
+            writeln!(stdout, "{id}")?;
+        }
+        return Ok(());
+    }
+
+    let theme = match cli.theme.as_deref() {
+        Some(value) if Path::new(value).is_file() || value.contains('/') || value.starts_with('~') => {
+            let path = value.strip_prefix("~/").map_or_else(
+                || PathBuf::from(value),
+                |rest| dirs::home_dir().map_or_else(|| PathBuf::from(value), |home| home.join(rest)),
+            );
+            let theme_json = std::fs::read_to_string(&path)
+                .with_context(|| format!("reading theme json {}", path.display()))?;
+            theme::resolve(&theme::parse(&theme_json)?)?
+        }
+        Some(id) => theme::load_by_id(id, ThemeMode::Dark)?,
+        None => theme::load_by_id(DEFAULT_THEME_ID, ThemeMode::Dark)?,
     };
-    let theme = theme::resolve(&theme::parse(&theme_json)?)?;
+
+    let cwd_display = std::env::current_dir().map_or_else(
+        |_| "?".into(),
+        |p| {
+            p.file_name()
+                .map_or_else(|| "/".into(), |s| s.to_string_lossy().into_owned())
+        },
+    );
+
+    // Demo mode keeps the fully-populated scene used for screenshots
+    // and tests. Real `senpi --neo` boots into an empty session with an
+    // idle footer so the user does not stare at a fake streaming run
+    // until a real RPC frame arrives.
+    let (initial_chat, header_state, footer_state) = if cli.demo {
+        (
+            chat::sample(),
+            HeaderState {
+                cwd: cwd_display,
+                session: "session: feat/neo-tui".into(),
+                branch: Some("feat/neo-tui".into()),
+            },
+            FooterState {
+                status: Status::Streaming,
+                status_label: "streaming response".into(),
+                model: "claude-opus-4-7".into(),
+                thinking: Some("max".into()),
+                tps: Some(84),
+                ctx_used_pct: 42,
+                tokens_in: 12_400,
+                tokens_out: 3_120,
+                elapsed_secs: 0,
+                spinner_glyph: '⠂',
+            },
+        )
+    } else {
+        (
+            chat::ChatState::default(),
+            HeaderState {
+                cwd: cwd_display,
+                session: String::new(),
+                branch: None,
+            },
+            FooterState {
+                status: Status::Idle,
+                status_label: "ready".into(),
+                model: String::new(),
+                thinking: None,
+                tps: None,
+                ctx_used_pct: 0,
+                tokens_in: 0,
+                tokens_out: 0,
+                elapsed_secs: 0,
+                spinner_glyph: '⠂',
+            },
+        )
+    };
 
     let config = AppConfig {
         theme,
-        initial_chat: chat::sample(),
-        header: HeaderState {
-            cwd: std::env::current_dir().map_or_else(
-                |_| "?".into(),
-                |p| {
-                    p.file_name()
-                        .map_or_else(|| "/".into(), |s| s.to_string_lossy().into_owned())
-                },
-            ),
-            session: "session: feat/neo-tui".into(),
-            branch: Some("feat/neo-tui".into()),
-        },
-        footer: FooterState {
-            status: Status::Streaming,
-            status_label: "streaming response".into(),
-            model: "claude-opus-4-7".into(),
-            thinking: Some("max".into()),
-            tps: Some(84),
-            ctx_used_pct: 42,
-            tokens_in: 12_400,
-            tokens_out: 3_120,
-            elapsed_secs: 0,
-            spinner_glyph: '⠂',
-        },
-        input_placeholder: "type your prompt here ".into(),
+        initial_chat,
+        header: header_state,
+        footer: footer_state,
+        input_placeholder: "Ask senpi anything, or paste / drop / type · / for commands".into(),
         demo_mode: cli.demo,
         // demo_seconds is a demo-mode option; outside demo mode we ignore
         // it so a stray `--demo-seconds 5` does not auto-exit a real
@@ -97,11 +157,27 @@ fn real_main() -> Result<()> {
         demo_seconds: (cli.demo && cli.demo_seconds > 0).then_some(cli.demo_seconds),
     };
 
+    // `maybe_spawn_backend()` in app::run reads SENPI_NEO_BACKEND_BIN
+    // and SENPI_NEO_BACKEND_ARGS from the environment. Forward the
+    // parsed CLI flags into the env so a direct binary invocation like
+    // `senpi-neo-tui --backend-bin senpi --backend-args '["--mode","rpc"]'`
+    // works without the caller needing to set the env vars manually.
+    // SAFETY-NOTE: `std::env::set_var` is unsafe on multi-thread Linux
+    // when other threads call `getenv` concurrently, but we mutate the
+    // env BEFORE building the tokio runtime so the spawn is sequenced
+    // before any concurrent reader.
+    if let Some(bin) = cli.backend_bin.as_ref() {
+        // SAFETY: single-threaded context at this point in main().
+        unsafe { std::env::set_var("SENPI_NEO_BACKEND_BIN", bin) };
+    }
+    if cli.backend_args != "[]" {
+        // SAFETY: single-threaded context at this point in main().
+        unsafe { std::env::set_var("SENPI_NEO_BACKEND_ARGS", &cli.backend_args) };
+    }
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     runtime.block_on(app::run(config))?;
-    let _ = cli.backend_bin;
-    let _ = cli.backend_args;
     Ok(())
 }
