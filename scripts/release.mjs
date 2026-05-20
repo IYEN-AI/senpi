@@ -15,13 +15,16 @@
  *   3. Write `version` into all 5 workspace package.json files directly (TAB indent,
  *      trailing newline). `npm version` is intentionally NOT used; the `-N` suffix on
  *      same-day re-releases looks like a prerelease tag to npm.
- *   4. Run `scripts/sync-versions.js` to propagate the new version to inter-package deps.
+ *   4. Run `scripts/sync-versions.js` to propagate the new version to source
+ *      inter-package deps.
  *   5. For each `packages/*\/CHANGELOG.md`, replace `## [Unreleased]` with
  *      `## [<version>] - <YYYY-MM-DD>`, remembering its subsection structure
  *      (`### Added`, `### Fixed`, ...) for re-insertion in step 7.
  *   6. `git add -A`, `git commit -m "release: v<version>"` (husky pre-commit runs),
- *      `git tag v<version>`, then `npm run publish` (publishes to npm with `--tag latest`).
- *   7. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders,
+ *      `git tag v<version>`.
+ *   7. Temporarily pin public `@code-yeongyu/senpi` deps to published upstream
+ *      semver packages, run `npm run publish`, then restore source deps.
+ *   8. Re-insert a fresh `## [Unreleased]` block with the same subsection placeholders,
  *      commit, then push `main` and the new tag.
  */
 
@@ -311,7 +314,7 @@ function pinPublicPackageDependencies(dryRun) {
 
 	if (updates.length === 0) {
 		log("public package dependencies already point at published npm versions");
-		return;
+		return updates;
 	}
 
 	log("pinning public package dependencies to published npm versions");
@@ -322,6 +325,35 @@ function pinPublicPackageDependencies(dryRun) {
 			dryRunLog(message);
 		} else {
 			log(message);
+		}
+	}
+
+	if (!dryRun) {
+		writeFileSync(file, `${JSON.stringify(pkg, null, "\t")}\n`);
+	}
+	return updates;
+}
+
+function restorePublicPackageDependencies(updates, dryRun) {
+	if (updates.length === 0) return;
+
+	const file = "packages/coding-agent/package.json";
+	const raw = readFileSync(file, "utf-8");
+	const pkg = JSON.parse(raw);
+	log("restoring source workspace dependency ranges");
+
+	for (const update of updates) {
+		const restoreRange = update.currentRange;
+		const message = `  ${update.depName}: ${update.newRange} -> ${restoreRange ?? "<missing>"}`;
+		if (dryRun) {
+			dryRunLog(message);
+			continue;
+		}
+		log(message);
+		if (restoreRange === undefined) {
+			delete pkg.dependencies[update.depName];
+		} else {
+			pkg.dependencies[update.depName] = restoreRange;
 		}
 	}
 
@@ -395,14 +427,15 @@ function main() {
 
 	applyWorkspaceVersions(version, args.dryRun);
 	runSyncVersions(args.dryRun);
-	pinPublicPackageDependencies(args.dryRun);
 	stampChangelogs(version, date, args.dryRun);
 
 	gitAddAll(args.dryRun);
 	gitCommit(`release: v${version}`, args.dryRun);
 	gitTag(version, args.dryRun);
 
+	const publicDependencyPinUpdates = pinPublicPackageDependencies(args.dryRun);
 	runPublish(args.dryRun);
+	restorePublicPackageDependencies(publicDependencyPinUpdates, args.dryRun);
 
 	reAddUnreleasedSections(version, date, args.dryRun);
 	gitAddAll(args.dryRun);

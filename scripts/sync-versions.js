@@ -46,25 +46,20 @@ if (versions.size > 1) {
 
 console.log('\n✅ All packages at same version (lockstep)');
 
-// @earendil-works/ packages exist as both local workspaces (CalVer) and upstream npm
-// packages (semver). The published @code-yeongyu/senpi pins its @earendil-works/ deps
-// to upstream versions so global installs resolve correctly. Other workspace packages
-// (agent, web-ui) still sync their internal deps to the local lockstep version during release.
-const SKIP_SYNC_PREFIX = '@earendil-works/';
-const PUBLISHED_PACKAGE = '@code-yeongyu/senpi';
+// Source manifests must stay on local lockstep workspace versions so local
+// builds and tests resolve the current workspace packages. The release script
+// rewrites publish-only dependency pins immediately before `npm publish` and
+// restores these source versions afterward.
 
 // Update all inter-package dependencies
 let totalUpdates = 0;
 for (const [dir, pkg] of Object.entries(packages)) {
-	const isPublishedPackage = pkg.data.name === PUBLISHED_PACKAGE;
 	let updated = false;
 	
 	// Check dependencies
 	if (pkg.data.dependencies) {
 		for (const [depName, currentVersion] of Object.entries(pkg.data.dependencies)) {
 			if (versionMap[depName]) {
-				// Skip upstream deps only in the published package
-				if (isPublishedPackage && depName.startsWith(SKIP_SYNC_PREFIX)) continue;
 				const newVersion = `^${versionMap[depName]}`;
 				if (currentVersion !== newVersion) {
 					console.log(`\n${pkg.data.name}:`);
@@ -81,8 +76,6 @@ for (const [dir, pkg] of Object.entries(packages)) {
 	if (pkg.data.devDependencies) {
 		for (const [depName, currentVersion] of Object.entries(pkg.data.devDependencies)) {
 			if (versionMap[depName]) {
-				// Skip upstream deps only in the published package
-				if (isPublishedPackage && depName.startsWith(SKIP_SYNC_PREFIX)) continue;
 				const newVersion = `^${versionMap[depName]}`;
 				if (currentVersion !== newVersion) {
 					console.log(`\n${pkg.data.name}:`);
