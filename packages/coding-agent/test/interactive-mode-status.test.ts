@@ -1,11 +1,18 @@
 import os, { homedir } from "node:os";
 import * as path from "node:path";
-import { type AutocompleteProvider, CombinedAutocompleteProvider, Container } from "@earendil-works/pi-tui";
+import {
+	type AutocompleteProvider,
+	CombinedAutocompleteProvider,
+	Container,
+	setKeybindings,
+} from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.js";
+import { KeybindingsManager } from "../src/core/keybindings.js";
 import type { SourceInfo } from "../src/core/source-info.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
+import { stripAnsi } from "../src/utils/ansi.js";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];
@@ -214,6 +221,36 @@ describe("InteractiveMode.setupAutocompleteProvider", () => {
 		expect(provider).toBe(customEditor.setAutocompleteProvider.mock.calls[0]?.[0]);
 		expect(provider.shouldTriggerFileCompletion?.(["foo"], 0, 3)).toBe(true);
 		expect(calls).toEqual(["shouldTrigger:wrap2", "shouldTrigger:wrap1"]);
+	});
+});
+
+describe("InteractiveMode.getWorkingIndicatorOptions", () => {
+	beforeAll(() => {
+		initTheme("dark");
+		setKeybindings(new KeybindingsManager());
+	});
+
+	test("uses a static bullet indicator with animated working text", () => {
+		const fakeThis: any = {
+			workingIndicatorOptions: undefined,
+			getWorkingElapsedSeconds: () => 7,
+		};
+
+		const options = (InteractiveMode as any).prototype.getWorkingIndicatorOptions.call(fakeThis);
+		const messageFormatter = options.messageFormatter;
+
+		expect(options.frames).toHaveLength(1);
+		expect(stripAnsi(options.frames[0])).toBe("•");
+		expect(options.messageIntervalMs).toBeGreaterThan(0);
+		expect(typeof messageFormatter).toBe("function");
+		expect(messageFormatter).toBeDefined();
+
+		const firstFrame = messageFormatter("Working", 0);
+		const nextFrame = messageFormatter("Working", 1_000);
+
+		expect(stripAnsi(firstFrame)).toBe("Working (7s • esc to interrupt)");
+		expect(stripAnsi(nextFrame)).toBe("Working (7s • esc to interrupt)");
+		expect(firstFrame).not.toBe(nextFrame);
 	});
 });
 

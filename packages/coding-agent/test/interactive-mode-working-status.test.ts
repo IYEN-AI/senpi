@@ -109,6 +109,22 @@ describe("formatWorkingStatusMessageFrame", () => {
 		expect(intensities.length).toBe("Working".length);
 		expect(intensities.some((intensity) => intensity > 0 && intensity < 1)).toBe(true);
 	});
+
+	test("animates answering text with stable plain text", () => {
+		const style = {
+			base: (text: string) => `\x1b[2m${text}\x1b[22m`,
+			glow: (text: string) => `\x1b[37m${text}\x1b[39m`,
+			highlight: (text: string) => `\x1b[1m${text}\x1b[22m`,
+			suffix: (text: string) => `\x1b[90m${text}\x1b[39m`,
+		};
+
+		const firstFrame = formatWorkingStatusMessageFrame("Answering", 7, "esc", 0, style);
+		const nextFrame = formatWorkingStatusMessageFrame("Answering", 7, "esc", 1_000, style);
+
+		expect(stripAnsi(firstFrame)).toBe("Answering (7s • esc to interrupt)");
+		expect(stripAnsi(nextFrame)).toBe("Answering (7s • esc to interrupt)");
+		expect(firstFrame).not.toBe(nextFrame);
+	});
 });
 
 describe("formatToolHookStatusMessageFrame", () => {
