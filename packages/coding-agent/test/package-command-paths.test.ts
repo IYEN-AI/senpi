@@ -5,6 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_NAME, ENV_AGENT_DIR, PACKAGE_NAME, VERSION } from "../src/config.ts";
 import { main } from "../src/main.ts";
 
+describe("package manifest", () => {
+	it("copies runtime assets before publish so npm packages include themes and templates", () => {
+		const manifest: unknown = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+
+		expect(manifest).toMatchObject({
+			scripts: {
+				prepublishOnly: expect.stringContaining("npm run copy-assets"),
+			},
+		});
+	});
+});
+
 describe("package commands", () => {
 	let tempDir: string;
 	let agentDir: string;
