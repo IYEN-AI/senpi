@@ -100,6 +100,13 @@ export function formatPathRelativeToCwdOrAbsolute(filePath: string, cwd: string)
 	return (getCwdRelativePath(absolutePath, cwd) ?? absolutePath).split(sep).join("/");
 }
 
+export function shortenPath(path: string): string {
+	if (!path) return path;
+	const home = homedir();
+	if (path.startsWith(home)) return `~${path.slice(home.length)}`;
+	return path;
+}
+
 export function markPathIgnoredByCloudSync(path: string): void {
 	const attrs =
 		process.platform === "darwin"

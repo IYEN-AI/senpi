@@ -14,6 +14,7 @@ import promptPresetExtension from "./prompt-preset/index.ts";
 import promptUrlWidgetExtension from "./prompt-url-widget.ts";
 import redrawsExtension from "./redraws.ts";
 import serviceTierExtension from "./service-tier.ts";
+import sessionObserverExtension from "./session-observer/index.ts";
 import todowriteExtension from "./todotools/index.ts";
 import toolPairGuardExtension from "./tool-pair-guard/index.ts";
 import tpsExtension from "./tps.ts";
@@ -46,5 +47,6 @@ export const builtinExtensions: BuiltinExtensionFactory[] = [
 	{ id: "tool-pair-guard", factory: toolPairGuardExtension },
 	{ id: "compaction", factory: compactionExtension },
 	{ id: "history-search", factory: historySearchExtension },
+	{ id: "session-observer", factory: sessionObserverExtension },
 	{ id: "kimi-web-search", factory: kimiWebSearchExtension },
 ];
