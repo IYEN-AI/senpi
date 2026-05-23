@@ -77,17 +77,20 @@ function isSystemInjectedPrompt(text: string): boolean {
 	return SYSTEM_PREFIXES.some((prefix) => trimmedStart.startsWith(prefix));
 }
 
+function extractUserText(content: unknown): string | undefined {
+	if (typeof content === "string") return content;
+	if (isReadonlyArray(content)) return getTextParts(content).join("\n");
+	return undefined;
+}
+
 function parseMessage(line: string, sessionFile: string, header: SessionHeader): HistoryEntry | undefined {
 	const parsed = parseJsonLine(line);
 	if (!isRecord(parsed) || parsed.type !== "message") return undefined;
 
 	const message = parsed.message;
 	if (!isRecord(message) || message.role !== "user") return undefined;
-	const content = message.content;
-	if (!isReadonlyArray(content)) return undefined;
-
-	const text = getTextParts(content).join("\n");
-	if (!text.trim() || isSystemInjectedPrompt(text)) return undefined;
+	const text = extractUserText(message.content);
+	if (text === undefined || !text.trim() || isSystemInjectedPrompt(text)) return undefined;
 
 	const rawTimestamp = parsed.timestamp;
 	if (typeof rawTimestamp !== "string") return undefined;
@@ -113,8 +116,9 @@ async function appendSessionEntries(sessionFile: string, entries: HistoryEntry[]
 	if (!headerLine) return;
 
 	const header = parseHeader(headerLine, sessionFile);
-	for (const [index, line] of lines.entries()) {
-		if (index === 0) continue;
+	for (let index = lines.length - 1; index >= 1; index--) {
+		const line = lines[index];
+		if (line === undefined) continue;
 		const entry = parseMessage(line, sessionFile, header);
 		if (entry) entries.push(entry);
 		if (entries.length >= MAX_HISTORY_ENTRIES) return;

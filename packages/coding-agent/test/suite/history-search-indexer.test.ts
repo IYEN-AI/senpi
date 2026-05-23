@@ -73,14 +73,38 @@ describe("indexSessions", () => {
 		expect(entries.find((item) => item.text === "duplicate")?.sessionId).toBe("newer");
 	});
 
-	it("caps indexed entries at 10000", async () => {
+	it("caps indexed entries at 10000 and keeps newest prompts when over cap", async () => {
 		const root = await tempRoots.make();
 		const sessionsDir = join(root, "sessions");
 		const lines = [sessionLine("bulk")];
 		for (let index = 0; index < 10_005; index++) lines.push(userLine([`prompt ${index}`], BASE_TIME + index));
 		await writeSessionFile(sessionsDir, "bulk.jsonl", lines);
 
-		expect(await indexSessions(sessionsDir)).toHaveLength(10_000);
+		const entries = await indexSessions(sessionsDir);
+		expect(entries).toHaveLength(10_000);
+		const texts = new Set(entries.map((entry) => entry.text));
+		expect(texts.has("prompt 10004")).toBe(true);
+		expect(texts.has("prompt 0")).toBe(false);
+	});
+
+	it("accepts legacy string content for user messages", async () => {
+		const root = await tempRoots.make();
+		const sessionsDir = join(root, "sessions");
+		const stringMessage = JSON.stringify({
+			type: "message",
+			id: "msg-legacy",
+			parentId: "parent",
+			timestamp: new Date(BASE_TIME + 2_000).toISOString(),
+			message: { role: "user", content: "legacy string prompt" },
+		});
+		await writeSessionFile(sessionsDir, "legacy.jsonl", [
+			sessionLine("legacy", "/repo", BASE_TIME),
+			stringMessage,
+			userLine(["structured prompt"], BASE_TIME + 3_000),
+		]);
+
+		const entries = await indexSessions(sessionsDir);
+		expect(entries.map((entry) => entry.text)).toEqual(["structured prompt", "legacy string prompt"]);
 	});
 
 	it("indexes .jsonl files at the top level (custom session dir layout)", async () => {
