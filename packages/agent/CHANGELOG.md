@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Breaking Changes
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
 ## [2026.5.24] - 2026-05-24
 
 ### Breaking Changes
